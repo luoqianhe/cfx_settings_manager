@@ -1,0 +1,174 @@
+{
+  "blade_profile_parameters": {
+    "unstable": {
+      "type": "integer",
+      "range": [0, 18],
+      "description": "Blade effect type",
+      "values": {
+        "0": "None - inherits from regular blade",
+        "1": "Unstable blade",
+        "2": "Flame (legacy fire)",
+        "3": "Rain Sizzle",
+        "4": "Chainsaw",
+        "5": "Starkiller",
+        "6": "Unstable TFU",
+        "7": "Gradient",
+        "8": "Wave",
+        "9": "Rainbow",
+        "10": "Theater chase",
+        "11": "Sauron",
+        "12": "Sauron II",
+        "13": "Jedi Fallen Order",
+        "14": "Knight Rider / Energy Beam",
+        "15": "Generative Unstable Fire",
+        "16": "Bicolor Pulse Fx",
+        "17": "GraFx powered blade",
+        "18": "Vision fx (GraFx powered PoV)"
+      }
+    },
+    "style_lockup": {
+      "type": "integer",
+      "range": [1, 7],
+      "description": "Lockup effect style",
+      "values": {
+        "1": "Legacy lockup all over blade",
+        "2": "Localized legacy lockup",
+        "3": "Noise localized lockup",
+        "4": "Alternate noise variant",
+        "5": "Flare lockup",
+        "6": "Unicorn rainbow lockup",
+        "7": "GraFx lockup sequence"
+      }
+    },
+    "style_clash": {
+      "type": "integer",
+      "range": [1, 7],
+      "description": "Flash on Clash (FoC) effect style",
+      "values": {
+        "1": "Legacy clash all over blade",
+        "2": "Full blade fade",
+        "3": "Random local fade",
+        "4": "Fixed local fade",
+        "5": "Base flare",
+        "6": "Unicorn clash",
+        "7": "Absorb effect"
+      }
+    },
+    "style_drag": {
+      "type": "integer",
+      "range": [1, 5],
+      "description": "Drag tip effect style",
+      "values": {
+        "1": "Simple/uniform noise",
+        "2": "Sparking with distributed sparks",
+        "3": "Gradient colored tip",
+        "4": "Gradient with heat map",
+        "5": "Flare drag with subtle noise"
+      }
+    },
+    "style_flicker": {
+      "type": "integer",
+      "range": [0, 5],
+      "description": "Blade flicker effect style",
+      "values": {
+        "0": "Legacy flicker - homogeneous random",
+        "1": "Bicolor flicker with random mix",
+        "2": "Movie flicker with color bands",
+        "3": "Brownian noise",
+        "4": "Random noise variant",
+        "5": "Fire flicker"
+      }
+    },
+    "flks": {
+      "type": "integer",
+      "range": [0, 500],
+      "min_ledstrip": 6,
+      "description": "Flicker speed/instability (0=disabled, higher=more chaotic)",
+      "notes": "Keep above 6 for LED strips. Lower values = subtle changes, higher values = damaged look"
+    },
+    "flkd": {
+      "type": "integer",
+      "range": [0, 100],
+      "description": "Flicker depth %",
+      "notes": "Controls how much brightness varies. Higher values create larger gaps in intensity"
+    },
+    "shmrd": {
+      "type": "integer",
+      "range": [0, 100],
+      "description": "Shimmer duration",
+      "notes": "Total duration of shimmer event during clash"
+    },
+    "shmrp": {
+      "type": "integer",
+      "range": [0, 100],
+      "description": "Shimmer period"
+    },
+    "shmrr": {
+      "type": "integer",
+      "range": [0, 100],
+      "description": "Shimmer randomness",
+      "notes": "0 = strobe effect, higher values = more irregular"
+    },
+    "focd": {
+      "type": "integer",
+      "range": [0, 100],
+      "description": "Flash on Clash duration"
+    },
+    "mapping_unstable": {
+      "type": "integer",
+      "range": [0, 2],
+      "description": "Unstable effect motion response",
+      "values": {
+        "0": "Disabled",
+        "1": "Swing speed",
+        "2": "Gyro/orientation"
+      }
+    },
+    "mapping_lockup": {
+      "type": "integer",
+      "range": [0, 2],
+      "description": "Lockup effect motion response",
+      "values": {
+        "0": "Fixed position",
+        "1": "Blade angle",
+        "2": "Roll angle"
+      }
+    },
+    "mapping_drag": {
+      "type": "integer",
+      "range": [0, 1],
+      "description": "Drag effect response",
+      "values": {
+        "0": "Fixed effect",
+        "1": "Motion reactive"
+      }
+    },
+    "mapping_move": {
+      "type": "range_pair",
+      "range": [0, 1023],
+      "description": "Motion detection range",
+      "format": "min,max"
+    },
+    "mapping_audio": {
+      "type": "range_pair",
+      "range": [0, 65535],
+      "description": "Audio responsiveness range",
+      "format": "min,max"
+    },
+    "style_grafx1": {
+      "type": "integer",
+      "range": [-1, 31],
+      "description": "First GraFx sequence profile"
+    },
+    "style_grafx2": {
+      "type": "integer",
+      "range": [-1, 31],
+      "description": "Second GraFx sequence profile"
+    },
+    "style_grafx3": {
+      "type": "integer",
+      "range": [-1, 31],
+      "description": "Third GraFx sequence profile"
+    }
+  }
+}
