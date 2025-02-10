@@ -1,0 +1,115 @@
+This is the file structure of my project - the folders are marked (folder); this isn't in the actual name:
+
+cfx_settings_manager
+* src (folder)
+   * config (folder)
+      * parameters.json
+   * core (folder)
+      * color_utils.py
+      * file_handler.py
+      * settings.py
+      * validators.py
+   * gui (folder)
+      * widgets (folder)
+         * settings_grid.py
+         * widget_factory.py
+      * edit_dialogs.py
+      * main_window.py
+   * test_cfx_folder (folder)
+      * 1-THE_LIGHT (folder)
+         * font_config.txt
+      * 2-DARK_EDITION (folder)
+         * font_config.txt
+      * colors.txt
+      * config.txt
+   * main.py
+* test_dialog_with_real_values.py
+* requirements.txt
+* README.md
+
+I should have uploaded all the relevant files for the project. I'm in the process of creating the overall GUIs and putting different pieces together.
+
+------
+
+Here's the general structure of the CFX files:
+* The files are stored on an SD card.
+* At the root of the card are 'config.txt' and 'colors.txt' files
+* each of these files lists parameters and values (one parameter per line)
+* For config.txt:
+   * The first chunk of the file has general parameters for all soundfonts.
+   * The next chunk of the file has parameters organized in different profiles
+   * each profile parameter chunk begins with '[profile='] and a number ('[profile=0]', '[profile=1]', etc., without quotes)
+
+--------
+
+Let me tell you about colors.txt and give you more details about the whole system.
+
+The colors.txt file has a list of parameters that define colors. The file can have up to 32 sets of parameters (so 32 colors). Each set of color parameters is marked with [color=] + a number. E.g. - [color=0], [color=1], etc. 
+
+At the root of the SD card there are also folders for separate soundfonts. These folders are named in the format number-sound_font_name (example: 1-THE_LIGHT). The numbers are sequential starting with 1.
+Inside each folder is a font_config.txt file. These files define which blade parameter (the profiles from config.txt, defined by the start_blade parameter) and color (from color.txt, defined by start_color) the soundfont will use.
+
+There are multiple parameters (over 100), some defined in config.txt and some in font_config.txt. The files also have comments marked with // and ##
+
+For example, here's the font_config.txt file for 1-THE_LIGHT:
+
+// Font specific configuration
+used_profiles_color=11111111111111110111111111111111
+used_profiles_blade=10111110001111111111111111111111
+start_color=12
+start_blade=0
+skip=0
+glyph=100000000
+hum_gain=100
+hum_delay=0
+
+## SMOOTHSWING parameters
+smooth_sharp=3.0
+smooth_gain=100
+smooth_width1=45
+smooth_width2=160
+smooth_sens=250
+smooth_physics=950
+smooth_dampen=80
+smooth_mode=2
+
+## BLADE timings
+qon=300
+qoff=0
+ignd=0
+retd=0
+tridenton=0
+tridentoff=0
+tridentfx=0
+tridentflk=0
+tridentquick=300
+
+## Blaster ACCUBOLT & MULTIBOLTS (timings in ms)
+bolt0=1
+bolt1=1
+bolt2=1
+bolt3=1
+bolt4=1
+bolt5=1
+bolt6=1
+bolt7=1
+bolt8=1
+
+-----
+
+The parameters can be difficult to work with, since they exist in multiple files and some of them aren't self explanatory. Also, the soundboard firmware is regularly updated, and new parameters will be added in the future. 
+
+Because of that the parameter information is stored separately in the parameters.json file. Here's an example of the format for the 'twon' parameter:
+
+    "twon": {
+    "type": "range_pair",
+    "range": [-1800, 1800],
+    "description": "Twist-on behavior range",
+    "display_type": "triple_range",
+    "format": "angle,min,max"
+}
+
+The display_type field determines which function in widget_factory is called to display the parameter in the gui. Examples of this can be seen in the test_dialog_with_real_values.py file (we're using this to test the widget_factory functions).
+
+The value formats vary per parameter - some are ints, text, dropdowns, toggles, etc.
+There are no parameter dependencies (that I know of).
