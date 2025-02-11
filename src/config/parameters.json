@@ -1,9 +1,61 @@
 {
   "blade_profile_parameters": {
+    "style_pon": {
+    "type": "integer",
+    "range": [0, 13],
+    "description": "Power-on effect style",
+    "display_type": "dropdown",
+    "values": {
+        "0": "Normal/regular power-on with scrolling",
+        "1": "Lightstick style",
+        "2": "Simple flare style",
+        "3": "Base flare style",
+        "4": "Tip flare style",
+        "5": "Full flare style",
+        "6": "Crumble style",
+        "7": "Quicksilver style",
+        "8": "Mercury style",
+        "9": "Catchup style",
+        "10": "GraFx sequence",
+        "11": "Inverted ignition",
+        "12": "Split-in",
+        "13": "Split-out"
+    }
+},
+    "color": {
+    "type": "color_values",
+    "format": "R,G,B,W",
+    "range": [0, 1023],
+    "description": "Main blade color values",
+    "display_type": "color_picker"
+},
+    "focl": {
+   "type": "integer",
+   "range": [0, 1],
+   "description": "FoC Color Lock",
+   "display_type": "toggle",
+   "values": {
+       "0": "Disabled - uses FoC color",
+       "1": "Enabled - locks to blade color"
+    },
+    "twon": {
+    "type": "range_pair",
+    "range": [-1800, 1800],
+    "description": "Twist-on behavior range",
+    "display_type": "triple_range",
+    "format": "angle,min,max"
+},
+"pname": {
+    "type": "text",
+    "description": "Profile name",
+    "display_type": "text_input"
+}
+  },
     "unstable": {
       "type": "integer",
       "range": [0, 18],
       "description": "Blade effect type",
+      "display_type": "dropdown",
       "values": {
         "0": "None - inherits from regular blade",
         "1": "Unstable blade",
@@ -30,6 +82,7 @@
       "type": "integer",
       "range": [1, 7],
       "description": "Lockup effect style",
+      "display_type": "dropdown",
       "values": {
         "1": "Legacy lockup all over blade",
         "2": "Localized legacy lockup",
@@ -44,6 +97,7 @@
       "type": "integer",
       "range": [1, 7],
       "description": "Flash on Clash (FoC) effect style",
+      "display_type": "dropdown",
       "values": {
         "1": "Legacy clash all over blade",
         "2": "Full blade fade",
@@ -58,6 +112,7 @@
       "type": "integer",
       "range": [1, 5],
       "description": "Drag tip effect style",
+      "display_type": "dropdown",
       "values": {
         "1": "Simple/uniform noise",
         "2": "Sparking with distributed sparks",
@@ -70,6 +125,7 @@
       "type": "integer",
       "range": [0, 5],
       "description": "Blade flicker effect style",
+      "display_type": "dropdown",
       "values": {
         "0": "Legacy flicker - homogeneous random",
         "1": "Bicolor flicker with random mix",
@@ -84,40 +140,47 @@
       "range": [0, 500],
       "min_ledstrip": 6,
       "description": "Flicker speed/instability (0=disabled, higher=more chaotic)",
+      "display_type": "spinner",
       "notes": "Keep above 6 for LED strips. Lower values = subtle changes, higher values = damaged look"
     },
     "flkd": {
       "type": "integer",
       "range": [0, 100],
       "description": "Flicker depth %",
+      "display_type": "spinner",
       "notes": "Controls how much brightness varies. Higher values create larger gaps in intensity"
     },
     "shmrd": {
       "type": "integer",
       "range": [0, 100],
       "description": "Shimmer duration",
+      "display_type": "spinner",
       "notes": "Total duration of shimmer event during clash"
     },
     "shmrp": {
       "type": "integer",
       "range": [0, 100],
-      "description": "Shimmer period"
+      "description": "Shimmer period",
+      "display_type": "spinner"
     },
     "shmrr": {
       "type": "integer",
       "range": [0, 100],
       "description": "Shimmer randomness",
+      "display_type": "spinner",
       "notes": "0 = strobe effect, higher values = more irregular"
     },
     "focd": {
       "type": "integer",
       "range": [0, 100],
-      "description": "Flash on Clash duration"
+      "description": "Flash on Clash duration",
+      "display_type": "spinner"
     },
     "mapping_unstable": {
       "type": "integer",
       "range": [0, 2],
       "description": "Unstable effect motion response",
+      "display_type": "dropdown",
       "values": {
         "0": "Disabled",
         "1": "Swing speed",
@@ -128,6 +191,7 @@
       "type": "integer",
       "range": [0, 2],
       "description": "Lockup effect motion response",
+      "display_type": "dropdown",
       "values": {
         "0": "Fixed position",
         "1": "Blade angle",
@@ -138,6 +202,7 @@
       "type": "integer",
       "range": [0, 1],
       "description": "Drag effect response",
+      "display_type": "dropdown",
       "values": {
         "0": "Fixed effect",
         "1": "Motion reactive"
@@ -147,28 +212,45 @@
       "type": "range_pair",
       "range": [0, 1023],
       "description": "Motion detection range",
+      "display_type": "range_pair",
       "format": "min,max"
     },
     "mapping_audio": {
       "type": "range_pair",
       "range": [0, 65535],
       "description": "Audio responsiveness range",
+      "display_type": "range_pair",
       "format": "min,max"
     },
     "style_grafx1": {
       "type": "integer",
       "range": [-1, 31],
-      "description": "First GraFx sequence profile"
+      "description": "First GraFx sequence profile",
+      "display_type": "dropdown"
     },
     "style_grafx2": {
       "type": "integer",
       "range": [-1, 31],
-      "description": "Second GraFx sequence profile"
+      "description": "Second GraFx sequence profile",
+      "display_type": "dropdown"
     },
     "style_grafx3": {
       "type": "integer",
       "range": [-1, 31],
-      "description": "Third GraFx sequence profile"
-    }
+      "description": "Third GraFx sequence profile",
+      "display_type": "dropdown"
+    },
+    "twon": {
+    "type": "range_pair",
+    "range": [-1800, 1800],
+    "description": "Twist-on behavior range",
+    "display_type": "triple_range",
+    "format": "angle,min,max"
+},
+"pname": {
+    "type": "text",
+    "description": "Profile name",
+    "display_type": "text_input"
+}
   }
 }

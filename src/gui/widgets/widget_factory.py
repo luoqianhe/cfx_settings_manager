@@ -201,8 +201,8 @@ def create_triple_range_widget(param_name, param_def):
     layout.addWidget(inputs_widget)
     return container, (angle_spin, min_spin, max_spin)
 
-def create_text_input_widget(param_name, param_def):
-    """Create a text input widget from parameter definition"""
+def create_text_widget(param_name, param_def):
+    """Create a text input widget"""
     container = QtWidgets.QWidget()
     layout = QtWidgets.QVBoxLayout(container)
     
@@ -214,9 +214,8 @@ def create_text_input_widget(param_name, param_def):
     
     # Create text input
     text_input = QtWidgets.QLineEdit()
-    text_input.setPlaceholderText(f"Enter {param_name}...")
-    
     layout.addWidget(text_input)
+    
     return container, text_input
 
 def create_toggle_widget(param_name, param_def):

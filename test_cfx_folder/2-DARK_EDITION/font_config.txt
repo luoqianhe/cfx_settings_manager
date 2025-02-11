@@ -1,0 +1,39 @@
+// Font specific configuration
+used_profiles_color=11111111111111110111111111111111
+used_profiles_blade=01111110001111111111111111111111
+start_color=6
+start_blade=1
+skip=0
+glyph=100000000
+hum_gain=100
+hum_delay=0
+
+
+## SMOOTHSWING parameters
+smooth_sharp=3.00
+smooth_gain=100
+smooth_width1=45
+smooth_width2=160
+smooth_sens=250
+smooth_physics=950
+smooth_dampen=80
+smooth_mode=2
+
+## BLADE timings
+qon=200
+qoff=0
+ignd=0
+retd=0
+tridenton=0
+tridentoff=0
+tridentfx=0
+tridentflk=0
+tridentquick=200
+
+## Blaster ACCUBOLT & MULTIBOLTS (timings in ms) 
+bolt0=1
+bolt1=1
+bolt2=1
+bolt3=1
+bolt4=1
+bolt5=1

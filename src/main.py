@@ -5,12 +5,6 @@ from gui.main_window import MainWindow
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
-
-     # Set light mode style
-    app.setStyle('Fusion')
-    palette = app.palette()
-    app.setPalette(palette)
-    
     window = MainWindow()
     window.show()
     return app.exec()

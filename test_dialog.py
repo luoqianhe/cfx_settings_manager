@@ -218,7 +218,7 @@ class InputTestWindow(QtWidgets.QMainWindow):
        text_group = QtWidgets.QGroupBox("pname")
        text_layout = QtWidgets.QVBoxLayout(text_group)
        
-       desc = QtWidgets.QLabel("Profile name for blade configuration")
+       desc = QtWidgets.QLabel("Blade profile name")
        desc.setWordWrap(True)
        text_layout.addWidget(desc)
        
