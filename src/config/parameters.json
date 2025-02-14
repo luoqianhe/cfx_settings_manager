@@ -139,9 +139,9 @@
       "type": "integer",
       "range": [0, 500],
       "min_ledstrip": 6,
-      "description": "Flicker speed/instability (0=disabled, higher=more chaotic)",
+      "description": "Flicker speed/instability",
       "display_type": "spinner",
-      "notes": "Keep above 6 for LED strips. Lower values = subtle changes, higher values = damaged look"
+      "notes": "0=disabled, higher=more chaotic. Keep above 6 for LED strips. Lower values = subtle changes, higher values = damaged look"
     },
     "flkd": {
       "type": "integer",

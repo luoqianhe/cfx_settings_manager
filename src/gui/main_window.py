@@ -7,7 +7,9 @@ from gui.widgets.widget_factory import (
     create_toggle_widget, 
     create_range_pair_widget,
     create_color_picker_widget,
-    create_triple_range_widget
+    create_triple_range_widget,
+    create_text_widget,
+    create_parameter_widget
 )
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -260,91 +262,152 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception as e:
             print(f"Error loading blade profile: {e}")
             return None
-
+   
     def display_settings(self, settings):
         try:
             print("\nDEBUG: Displaying settings:", settings)
             
-            # Create main scroll widget with vertical layout
+            # Create and configure scroll area widget
             scroll_widget = QtWidgets.QWidget()
+            scroll_widget.setContentsMargins(0, 0, 0, 0)
             main_layout = QtWidgets.QVBoxLayout(scroll_widget)
+            main_layout.setSpacing(0)
+            main_layout.setContentsMargins(0, 0, 0, 0)
 
-            # Create widget for font settings
-            font_widget = QtWidgets.QWidget()
-            layout = QtWidgets.QGridLayout(font_widget)
+            # Create settings grid widget
+            grid_widget = QtWidgets.QWidget()
+            grid_layout = QtWidgets.QGridLayout(grid_widget)
+            grid_layout.setSpacing(12)
+            grid_layout.setColumnStretch(2, 1)
             
-            row = 0
+            # Add headers
+            headers = ["Parameter", "Value", "Description"]
+            for col, text in enumerate(headers):
+                label = QtWidgets.QLabel(text)
+                label.setStyleSheet("""
+                    font-weight: bold;
+                    color: #2c3e50;
+                    padding: 8px 4px;
+                    border-bottom: 2px solid #3498db;
+                """)
+                grid_layout.addWidget(label, 0, col)
+
+            # Process settings and create widgets
+            row = 1
             for param_name, value in settings.items():
                 param_def = self.get_parameter_definition(param_name)
                 if not param_def:
-                    # print(f"DEBUG: No parameter definition found for {param_name}")
                     continue
-                    
-                print(f"DEBUG: Setting up widget for {param_name} = {value}")
+
+                # Background color for row
+                bg_color = "#f8f9fa" if row % 2 == 0 else "white"
                 
                 # Parameter name
                 name_label = QtWidgets.QLabel(param_name)
-                layout.addWidget(name_label, row, 0)
+                name_label.setStyleSheet(f"""
+                    font-weight: bold;
+                    color: #2c3e50;
+                    padding: 8px;
+                    background-color: {bg_color};
+                """)
+                grid_layout.addWidget(name_label, row, 0)
                 
-                # Create appropriate widget based on display_type
+                # Get display type and create appropriate widget
                 display_type = param_def.get('display_type', 'text')
-                print(f"DEBUG: Display type for {param_name} is {display_type}")
                 container = None
+                widget = None
                 
-                if display_type == 'text':
-                    container, widget = create_text_widget(param_name, param_def)
-                elif display_type == 'spinner':
-                    container, widget = create_spinner_widget(param_name, param_def)
-                elif display_type == 'dropdown':
-                    container, widget = create_dropdown_widget(param_name, param_def)
-                elif display_type == 'toggle':
-                    container, widget = create_toggle_widget(param_name, param_def)
-                elif display_type == 'range_pair':
-                    container, widget = create_range_pair_widget(param_name, param_def)
-                elif display_type == 'color_picker':
-                    container, widget = create_color_picker_widget(param_name, param_def)
-                elif display_type == 'triple_range':
-                    container, widget = create_triple_range_widget(param_name, param_def)
-                    
-                if container:
-                    # Set current value
-                    if hasattr(widget, 'setValue'):
-                        try:
+                try:
+                    from gui.widgets.widget_factory import (
+                        create_spinner_widget, 
+                        create_dropdown_widget,
+                        create_toggle_widget,
+                        create_range_pair_widget,
+                        create_color_picker_widget,
+                        create_triple_range_widget,
+                        create_text_widget
+                    )
+
+                    if display_type == 'text_input':
+                        container, widget = create_text_widget(param_name, param_def)
+                    elif display_type == 'spinner':
+                        container, widget = create_spinner_widget(param_name, param_def)
+                    elif display_type == 'dropdown':
+                        container, widget = create_dropdown_widget(param_name, param_def)
+                    elif display_type == 'toggle':
+                        container, widget = create_toggle_widget(param_name, param_def)
+                    elif display_type == 'range_pair':
+                        container, widget = create_range_pair_widget(param_name, param_def)
+                    elif display_type == 'color_picker':
+                        container, widget = create_color_picker_widget(param_name, param_def)
+                    elif display_type == 'triple_range':
+                        container, widget = create_triple_range_widget(param_name, param_def)
+
+                    if container:
+                        # Style container
+                        container.setStyleSheet(f"""
+                            background-color: {bg_color};
+                            padding: 4px;
+                        """)
+                        grid_layout.addWidget(container, row, 1)
+                        
+                        # Set value based on widget type
+                        if isinstance(widget, QtWidgets.QLineEdit):
+                            widget.setText(str(value))
+                            print(f"DEBUG: Set text {value} for {param_name}")
+                        elif isinstance(widget, QtWidgets.QSpinBox):
                             widget.setValue(int(value))
                             print(f"DEBUG: Set value {value} for {param_name}")
-                        except (ValueError, TypeError):
-                            print(f"DEBUG: Could not set value for {param_name}: {value}")
-                    elif isinstance(widget, QtWidgets.QLineEdit):
-                        widget.setText(str(value))
-                        print(f"DEBUG: Set text {value} for {param_name}")
-                    elif isinstance(widget, QtWidgets.QComboBox):
-                        index = widget.findData(str(value))
-                        if index >= 0:
-                            widget.setCurrentIndex(index)
-                            print(f"DEBUG: Set combo index {index} for {param_name}")
-                    layout.addWidget(container, row, 1)
-                    
-                # Description
+                        elif isinstance(widget, QtWidgets.QComboBox):
+                            index = widget.findData(str(value))
+                            if index >= 0:
+                                widget.setCurrentIndex(index)
+                                print(f"DEBUG: Set combo index {index} for {param_name}")
+                        elif isinstance(widget, tuple):  # For range_pair or color_picker that return multiple widgets
+                            if display_type == 'range_pair':
+                                min_val, max_val = map(int, value.split(','))
+                                widget[0].setValue(min_val)
+                                widget[1].setValue(max_val)
+                            elif display_type == 'triple_range':
+                                angle, min_val, max_val = map(int, value.split(','))
+                                widget[0].setValue(angle)
+                                widget[1].setValue(min_val)
+                                widget[2].setValue(max_val)
+                            elif display_type == 'color_picker':
+                                r, g, b, w = map(int, value.split(','))
+                                widget[0]['R'][1].setValue(r)
+                                widget[0]['G'][1].setValue(g)
+                                widget[0]['B'][1].setValue(b)
+                                widget[0]['W'][1].setValue(w)
+
+                except Exception as e:
+                    print(f"DEBUG: Error creating/setting widget for {param_name}: {e}")
+
+                # Description label
                 desc_label = QtWidgets.QLabel(param_def.get('description', ''))
                 desc_label.setWordWrap(True)
-                layout.addWidget(desc_label, row, 2)
+                desc_label.setStyleSheet(f"""
+                    color: #666666;
+                    background-color: {bg_color};
+                    padding: 8px;
+                """)
+                grid_layout.addWidget(desc_label, row, 2)
                 
                 row += 1
 
-            # Add font settings widget to main layout
-            main_layout.addWidget(font_widget)
-            
-            # Clear previous widget before setting new one
+            # Add grid widget to main layout
+            main_layout.addWidget(grid_widget)
+
+            # Clear any existing widget in the scroll area
             if self.param_widget.widget():
                 self.param_widget.widget().deleteLater()
-                
-            # Set the scroll widget
+
+            # Set new widget
             self.param_widget.setWidget(scroll_widget)
 
         except Exception as e:
             print(f"Error displaying settings: {e}")
             QtWidgets.QMessageBox.warning(self, "Error", f"Failed to display settings: {str(e)}")
-    
     def edit_parameter(self, param_name, current_value):
         try:
             param_def = self.get_parameter_definition(param_name)

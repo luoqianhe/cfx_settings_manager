@@ -15,7 +15,7 @@ class SettingsGrid(QWidget):
     def __init__(self, title: str, main_window=None, parent=None):
         super().__init__(parent)
         self.title = title
-        self.main_window = main_window  # Store the MainWindow reference
+        self.main_window = main_window  # Store the MainWindow reference 
         self.current_settings = {}
         self.param_definitions = {}
         self.load_parameter_definitions()

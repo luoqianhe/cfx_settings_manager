@@ -81,19 +81,6 @@ class TestWindow(QtWidgets.QMainWindow):
         config_settings = self.load_config_file(config_file)
         font_settings = self.load_font_config(font_config_file)
 
-        # DEBUG PRINT
-        print("\nLoaded config settings:", config_settings)
-        print('-------------')
-        print("Profile 0 settings:", config_settings.get(0, {}))
-        print("flks value:", config_settings.get(0, {}).get('flks'))
-        print("style_pon value:", config_settings.get(0, {}).get('style_pon'))
-        print('-------------')
-        print("Profile 1 settings:", config_settings.get(1, {}))
-        print("flks value:", config_settings.get(1, {}).get('flks'))
-        print("style_pon value:", config_settings.get(1, {}).get('style_pon'))
-        print("\nLoaded font settings:", font_settings)
-        print('-------------')
-
         # Create scroll area for content
         central = QtWidgets.QWidget()
         self.setCentralWidget(central)
