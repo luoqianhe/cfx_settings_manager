@@ -22,12 +22,11 @@
         "13": "Split-out"
     }
 },
-    "color": {
-    "type": "color_values",
-    "format": "R,G,B,W",
-    "range": [0, 1023],
-    "description": "Main blade color values",
-    "display_type": "color_picker"
+  "color": {
+    "type": "integer",
+    "range": [0, 31],
+    "description": "Main blade color profile selection", 
+    "display_type": "dropdown"
 },
     "focl": {
    "type": "integer",
