@@ -118,23 +118,25 @@ class RangePairEditDialog(BaseEditDialog):
 
 class EnumEditDialog(BaseEditDialog):
     """Dialog for editing enumerated values."""
+    def __init__(self, param_name: str, current_value: str, constraints: dict, parent=None, main_window=None):
+        self.main_window = main_window
+        super().__init__(param_name, current_value, constraints, parent)
+        
     def init_ui(self):
         super().init_ui()
-        
-        self.combo = QComboBox()
-        for value, description in self.constraints.get('values', {}).items():
-            self.combo.addItem(f"{value}: {description}", value)
+        container, combo = create_dropdown_widget(self.param_name, self.constraints, self.main_window)
+        self.combo = combo
             
         # Set current value
         index = self.combo.findData(self.current_value)
         if index >= 0:
             self.combo.setCurrentIndex(index)
             
-        self.content_layout.addWidget(self.combo)
+        self.content_layout.addWidget(container)
 
     def get_value(self):
         return self.combo.currentData()
-
+    
 class ColorEditDialog(BaseEditDialog):
     """Dialog for editing RGBW color values."""
     def init_ui(self):
@@ -174,26 +176,25 @@ class ColorEditDialog(BaseEditDialog):
         return ','.join(str(spinbox.value()) for spinbox in self.spinboxes)
 
 # Function to create appropriate dialog based on parameter type
-def create_edit_dialog(param_name: str, current_value: str, constraints: dict, parent=None) -> BaseEditDialog:
-    param_type = constraints.get('type', 'text')  # Default to text instead of number
-    
-    # Handle special parameter names that we know aren't integers
-    if param_name in ['pname', 'twon', 'twoff', 'pof', 'wagon', 'wagoff']:
-        return TextEditDialog(param_name, current_value, constraints, parent)
-    
-    dialog_classes = {
-        'integer': NumberEditDialog,
-        'range_pair': RangePairEditDialog,
-        'color_values': ColorEditDialog,
-        'text': TextEditDialog
-    }
-    
-    if 'values' in constraints:
-        return EnumEditDialog(param_name, current_value, constraints, parent)
-    
-    return dialog_classes.get(param_type, TextEditDialog)(
-        param_name, current_value, constraints, parent
-    )
+    def create_edit_dialog(param_name: str, current_value: str, constraints: dict, parent=None, main_window=None) -> BaseEditDialog:
+        param_type = constraints.get('type', 'text')  # Default to text instead of number
+        
+        # Handle special parameter names that we know aren't integers
+        if param_name in ['pname', 'twon', 'twoff', 'pof', 'wagon', 'wagoff']:
+            return TextEditDialog(param_name, current_value, constraints, parent)
+        
+        dialog_classes = {
+            'integer': NumberEditDialog,
+            'range_pair': RangePairEditDialog,
+            'text': TextEditDialog
+        }
+        
+        if 'values' in constraints or param_name == 'color':
+            return EnumEditDialog(param_name, current_value, constraints, parent, main_window)
+        
+        return dialog_classes.get(param_type, TextEditDialog)(
+            param_name, current_value, constraints, parent
+        )
 
 class TextEditDialog(BaseEditDialog):
     """Dialog for editing text values."""
@@ -231,8 +232,6 @@ class SpinnerDialog(BaseEditDialog):
 
     def get_value(self):
         return str(self.spinbox.value())
-    
-# In edit_dialogs.py, add:
 
 class DropdownDialog(BaseEditDialog):
     def init_ui(self):

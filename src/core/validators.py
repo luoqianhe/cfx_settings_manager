@@ -2,6 +2,7 @@
 from pathlib import Path
 from typing import Tuple, List, Dict, Optional
 
+
 class CFXValidationError(Exception):
     """Custom exception for CFX-specific validation errors."""
     pass
@@ -64,15 +65,24 @@ class CFXValidator:
     def is_valid_font_folder_name(name: str) -> bool:
         """Check if folder name follows the number-NAME format."""
         try:
-            number, name = name.split('-', 1)
-            return (
-                number.isdigit() and 
-                name.replace('_', '').isalnum() and
-                name.isupper()
-            )
+            # Split only first hyphen to get number
+            parts = name.split('-', 1)
+            if len(parts) != 2:
+                return False
+                
+            number, name = parts
+            
+            # Check if starts with a number
+            if not number.isdigit():
+                return False
+                
+            # Rest of name can contain hyphens, underscores, and alphanumeric characters
+            # We don't care about case
+            return True
+                
         except ValueError:
             return False
-
+    
     @staticmethod
     def validate_config_file(file_path: Path) -> Tuple[bool, List[str], Optional[Dict]]:
         """Validate config.txt file format and contents."""
@@ -175,3 +185,6 @@ class CFXValidator:
             errors.append(f"Error reading font config file: {str(e)}")
             
         return len(errors) == 0, errors, settings if len(errors) == 0 else None
+    
+print("In validators.py")
+print("Defined CFXValidator:", 'CFXValidator' in vars())

@@ -1,6 +1,8 @@
 # src/gui/main_window.py
 from PySide6 import QtWidgets, QtCore
 from pathlib import Path
+from core.validators import CFXValidator
+from core.file_handler import CFXFileHandler
 from gui.widgets.widget_factory import (
     create_spinner_widget, 
     create_dropdown_widget, 
@@ -54,12 +56,44 @@ class MainWindow(QtWidgets.QMainWindow):
        if config_path.exists():
            settings = self.load_font_settings(config_path)
            self.display_settings(settings)
-           
+
+    def load_cfx_folder(self, folder_path):
+        try:
+            self.folder_path = Path(folder_path)
+            self.file_handler = CFXFileHandler(self.folder_path)
+            
+            # Create validator directly
+            validator = CFXValidator()
+            is_valid, errors = validator.validate_root_folder(str(self.folder_path))
+            if not is_valid:
+                error_msg = "\n".join(errors)
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Invalid Folder Structure",
+                    f"The selected folder has the following issues:\n{error_msg}"
+                )
+                return
+            
+            # Clear and populate font list
+            self.font_list.clear()
+            for font_num, font_name, font_path in self.file_handler.load_font_folders():
+                list_item = QtWidgets.QListWidgetItem(f"{font_num}-{font_name}")
+                list_item.setData(QtCore.Qt.UserRole, str(font_path))
+                self.font_list.addItem(list_item)
+                
+        except Exception as e:
+            print(f"Error loading CFX folder: {e}")
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Error",
+                f"Failed to load CFX folder: {str(e)}"
+            )
+        
     def save_changes(self):
         try:
             # Get current font
-            current_font = self.font_list.currentItem()
-            if not current_font:
+            current_item = self.font_list.currentItem()
+            if not current_item:
                 raise Exception("No font selected")
                 
             response = QtWidgets.QMessageBox.question(
@@ -70,91 +104,59 @@ class MainWindow(QtWidgets.QMainWindow):
             )
             
             if response == QtWidgets.QMessageBox.Yes:
-                # TODO: Implement actual save logic
+                font_path = Path(current_item.data(QtCore.Qt.UserRole))
+                
+                # Get current settings from the UI
+                current_settings = self.get_current_settings()
+                
+                # Save font configuration
+                if not self.file_handler.save_font_config(font_path, current_settings):
+                    raise Exception("Failed to save font configuration")
+                
+                # If we have a blade profile, save it
+                if 'start_blade' in current_settings:
+                    profile_num = int(current_settings['start_blade'])
+                    if profile_num >= 0:  # Only save if it's a valid profile number
+                        if not self.file_handler.save_blade_profile(profile_num, current_settings):
+                            raise Exception(f"Failed to save blade profile {profile_num}")
+                
+                # If we have a color profile, save it
+                if 'start_color' in current_settings:
+                    color_num = int(current_settings['start_color'])
+                    if color_num >= 0:  # Only save if it's a valid color number
+                        if not self.file_handler.save_color_profile(color_num, current_settings):
+                            raise Exception(f"Failed to save color profile {color_num}")
+                
                 QtWidgets.QMessageBox.information(
                     self,
                     "Success",
                     "Changes saved successfully."
                 )
-                
+                    
         except Exception as e:
             QtWidgets.QMessageBox.critical(
                 self,
                 "Error",
                 f"Failed to save changes: {str(e)}"
             )
-
-    def load_cfx_folder(self, folder_path):
-        try:
-            self.folder_path = folder_path # store the folder path
-            print("Loading fonts...")
-            self.font_list.clear()
-            path = Path(folder_path)
             
-            # Find and sort font folders
-            folders = []
-            for item in path.iterdir():
-                if item.is_dir() and item.name[0].isdigit():
-                    number = int(item.name.split('-')[0])
-                    folders.append((number, item))
-            
-            # Sort by number
-            folders.sort(key=lambda x: x[0])
-            
-            # Add sorted folders to list
-            for _, item in folders:
-                print(f"Found font folder: {item.name}")
-                list_item = QtWidgets.QListWidgetItem(item.name)
-                list_item.setData(QtCore.Qt.UserRole, str(item))
-                self.font_list.addItem(list_item)
-                
-        except Exception as e:
-            print(f"Error loading fonts: {e}")
-            QtWidgets.QMessageBox.warning(None, "Error", f"Failed to load fonts: {str(e)}")
-
-    def load_prefs_file(self):
-        """Load preferences from prefs.txt"""
-        try:
-            prefs = {}
-            prefs_path = Path(self.folder_path) / "prefs.txt"
-            current_font = None
-            
-            with open(prefs_path, 'r') as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith('//'):
-                        if line.startswith('[font='):
-                            current_font = int(line[6:-1])
-                            prefs[current_font] = {}
-                        elif '=' in line and current_font is not None:
-                            key, value = line.split('=', 1)
-                            prefs[current_font][key.strip()] = value.strip()
-            
-            return prefs
-        except Exception as e:
-            print(f"Error loading prefs: {e}")
-            return {}
-    
     def on_font_selected(self, item):
         try:
-            path = Path(item.data(QtCore.Qt.UserRole))
-            print(f"\nDEBUG: Loading font settings from: {path}")
+            font_path = Path(item.data(QtCore.Qt.UserRole))
+            font_num = int(font_path.name.split('-')[0])
             
-            # Get font number from directory name
-            font_num = int(path.name.split('-')[0])
-            print(f"DEBUG: Font number: {font_num}")
-            
-            # Load font config
-            config_path = path / "font_config.txt"
-            if not config_path.exists():
-                print(f"DEBUG: font_config.txt not found in {path}")
-                QtWidgets.QMessageBox.warning(self, "Error", f"No font_config.txt found in {path}")
+            # Load font configuration
+            settings = self.file_handler.load_font_config(font_path)
+            if not settings:
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Error",
+                    f"No font_config.txt found in {font_path}"
+                )
                 return
-                
-            settings = self.load_settings_file(config_path)
             
-            # Load prefs
-            prefs = self.load_prefs_file()
+            # Load preferences
+            prefs = self.file_handler.load_preferences()
             font_prefs = prefs.get(font_num, {})
             
             # Determine which blade profile to use
@@ -172,97 +174,34 @@ class MainWindow(QtWidgets.QMainWindow):
 
             # Load blade profile if we have a valid profile number
             if profile_num and profile_num != '-1':
-                print(f"DEBUG: Loading blade profile {profile_num}")
-                blade_profile = self.load_blade_profile(profile_num)
+                blade_profile = self.file_handler.load_blade_profile(int(profile_num))
                 if blade_profile:
-                    print(f"DEBUG: Successfully loaded blade profile with {len(blade_profile)} parameters")
+                    # Get list of other fonts using this profile
+                    shared_with = self.file_handler.get_shared_profiles(int(profile_num))
+                    print(f"DEBUG: Profile {profile_num} is shared with: {shared_with}")
                     settings.update(blade_profile)
                 else:
                     print(f"DEBUG: Failed to load blade profile {profile_num}")
             
             # Load color profile if we have a valid color number
             if color_num and color_num != '-1':
-                print(f"DEBUG: Loading color profile {color_num}")
-                color_profile = self.load_color_profile(color_num)
+                color_profile = self.file_handler.load_color_profile(int(color_num))
                 if color_profile:
-                    print(f"DEBUG: Successfully loaded color profile with {len(color_profile)} parameters")
                     settings.update(color_profile)
                 else:
                     print(f"DEBUG: Failed to load color profile {color_num}")
             
             if settings:
-                print(f"DEBUG: Displaying {len(settings)} total parameters")
                 self.display_settings(settings)
                         
         except Exception as e:
             print(f"Error loading settings: {e}")
-            QtWidgets.QMessageBox.critical(self, "Error", f"Failed to load settings: {str(e)}")
-
-    def load_color_profile(self, color_num):
-        """Load color profile from colors.txt"""
-        try:
-            color_num = int(color_num)
-            color_path = Path(self.folder_path) / "colors.txt"
-            
-            if not color_path.exists():
-                print("DEBUG: colors.txt not found")
-                return None
-                
-            current_color = None
-            color_data = {}
-            
-            with open(color_path, 'r') as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith('[color='):
-                        current_color = int(line[7:-1])
-                    elif '=' in line and current_color == color_num and not line.startswith('//'):
-                        key, value = line.split('=', 1)
-                        color_data[key.strip()] = value.strip()
-                        
-            return color_data
-            
-        except Exception as e:
-            print(f"Error loading color profile: {e}")
-            return None
-    
-    def load_settings_file(self, file_path):
-        settings = {}
-        with open(file_path, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('//') and not line.startswith('#'):
-                    if '=' in line:
-                        key, value = line.split('=', 1)
-                        settings[key.strip()] = value.strip()
-        return settings
-
-    def load_blade_profile(self, profile_num):
-        try:
-            profile_num = int(profile_num)
-            config_path = Path(self.folder_path) / "config.txt"
-            
-            if not config_path.exists():
-                return None
-                
-            current_profile = None
-            profile_data = {}
-            
-            with open(config_path, 'r') as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith('[profile='):
-                        current_profile = int(line[9:-1])
-                    elif '=' in line and current_profile == profile_num:
-                        key, value = line.split('=', 1)
-                        profile_data[key.strip()] = value.strip()
-                        
-            return profile_data
-            
-        except Exception as e:
-            print(f"Error loading blade profile: {e}")
-            return None
-   
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to load settings: {str(e)}"
+            )
+        
     def display_settings(self, settings):
         try:
             print("\nDEBUG: Displaying settings:", settings)
@@ -333,7 +272,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     elif display_type == 'spinner':
                         container, widget = create_spinner_widget(param_name, param_def)
                     elif display_type == 'dropdown':
-                        container, widget = create_dropdown_widget(param_name, param_def)
+                        container, widget = create_dropdown_widget(param_name, param_def, self)
                     elif display_type == 'toggle':
                         container, widget = create_toggle_widget(param_name, param_def)
                     elif display_type == 'range_pair':
@@ -408,6 +347,7 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception as e:
             print(f"Error displaying settings: {e}")
             QtWidgets.QMessageBox.warning(self, "Error", f"Failed to display settings: {str(e)}")
+    
     def edit_parameter(self, param_name, current_value):
         try:
             param_def = self.get_parameter_definition(param_name)
