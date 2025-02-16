@@ -39,12 +39,6 @@ def create_spinner_widget(param_name, param_def):
     container = QtWidgets.QWidget()
     layout = QtWidgets.QVBoxLayout(container)
     
-    # Add description if present
-    if 'description' in param_def:
-        desc = QtWidgets.QLabel(param_def['description'])
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
-    
     # Create spinner
     spinner = QtWidgets.QSpinBox()
     range_min = param_def.get('range', [0])[0]
@@ -107,11 +101,6 @@ def create_range_pair_widget(param_name, param_def):
     container = QtWidgets.QWidget()
     layout = QtWidgets.QVBoxLayout(container)
     
-    if 'description' in param_def:
-        desc = QtWidgets.QLabel(param_def['description'])
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
-    
     inputs_widget = QtWidgets.QWidget()
     inputs_layout = QtWidgets.QHBoxLayout(inputs_widget)
     
@@ -135,11 +124,6 @@ def create_range_pair_widget(param_name, param_def):
 def create_color_picker_widget(param_name, param_def):
     container = QtWidgets.QWidget()
     layout = QtWidgets.QVBoxLayout(container)
-    
-    if 'description' in param_def:
-        desc = QtWidgets.QLabel(param_def['description'])
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
 
     color_inputs = {}
     preview = QtWidgets.QFrame()
@@ -193,11 +177,6 @@ def create_color_picker_widget(param_name, param_def):
 def create_triple_range_widget(param_name, param_def):
     container = QtWidgets.QWidget()
     layout = QtWidgets.QVBoxLayout(container)
-    
-    if 'description' in param_def:
-        desc = QtWidgets.QLabel(param_def['description'])
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
 
     inputs_widget = QtWidgets.QWidget()
     inputs_layout = QtWidgets.QHBoxLayout(inputs_widget)
@@ -229,12 +208,6 @@ def create_text_widget(param_name, param_def):
     container = QtWidgets.QWidget()
     layout = QtWidgets.QVBoxLayout(container)
     
-    # Add description if present
-    if 'description' in param_def:
-        desc = QtWidgets.QLabel(param_def['description'])
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
-    
     # Create text input
     text_input = QtWidgets.QLineEdit()
     layout.addWidget(text_input)
@@ -244,11 +217,6 @@ def create_text_widget(param_name, param_def):
 def create_toggle_widget(param_name, param_def):
     container = QtWidgets.QWidget()
     layout = QtWidgets.QVBoxLayout(container)
-    
-    if 'description' in param_def:
-        desc = QtWidgets.QLabel(param_def['description'])
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
     
     toggle = QtWidgets.QCheckBox(param_def['values']['1'])
     layout.addWidget(toggle)

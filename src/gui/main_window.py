@@ -13,6 +13,11 @@ from gui.widgets.widget_factory import (
     create_text_widget,
     create_parameter_widget
 )
+from PySide6.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QLabel, QPushButton, QFileDialog, QMessageBox, QScrollArea,
+    QLineEdit, QSpinBox, QComboBox
+)
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
@@ -230,35 +235,34 @@ class MainWindow(QtWidgets.QMainWindow):
                 "Error",
                 f"Failed to load settings: {str(e)}"
             )
-        
-    def display_settings(self, settings):
+    
+    def display_settings(self, settings: dict, shared_with: list = None):
+        """Update displayed settings."""
         try:
-            #print("\nDEBUG: Displaying settings:", settings)
-            
-            # Create and configure scroll area widget
-            scroll_widget = QtWidgets.QWidget()
+            # Create scroll area widget
+            scroll_widget = QWidget()
             scroll_widget.setContentsMargins(0, 0, 0, 0)
-            main_layout = QtWidgets.QVBoxLayout(scroll_widget)
+            main_layout = QVBoxLayout(scroll_widget)
             main_layout.setSpacing(0)
             main_layout.setContentsMargins(0, 0, 0, 0)
 
             # Create settings grid widget
-            grid_widget = QtWidgets.QWidget()
-            grid_layout = QtWidgets.QGridLayout(grid_widget)
-            grid_layout.setSpacing(12)
-            grid_layout.setColumnStretch(2, 1)
+            grid_widget = QWidget()
+            self.grid_layout = QGridLayout(grid_widget)
+            self.grid_layout.setSpacing(12)
+            self.grid_layout.setColumnStretch(1, 1)  # Make value column stretch
             
-            # Add headers
-            headers = ["Parameter", "Value", "Description"]
+            # Headers
+            headers = ["Parameter", "Value"]
             for col, text in enumerate(headers):
-                label = QtWidgets.QLabel(text)
+                label = QLabel(text)
                 label.setStyleSheet("""
                     font-weight: bold;
                     color: #2c3e50;
                     padding: 8px 4px;
                     border-bottom: 2px solid #3498db;
                 """)
-                grid_layout.addWidget(label, 0, col)
+                self.grid_layout.addWidget(label, 0, col)
 
             # Process settings and create widgets
             row = 1
@@ -270,32 +274,35 @@ class MainWindow(QtWidgets.QMainWindow):
                 # Background color for row
                 bg_color = "#f8f9fa" if row % 2 == 0 else "white"
                 
-                # Parameter name
-                name_label = QtWidgets.QLabel(param_name)
-                name_label.setStyleSheet(f"""
+                # Parameter name and description
+                name_container = QWidget()
+                name_layout = QVBoxLayout(name_container)
+                name_layout.setContentsMargins(8, 4, 8, 4)
+                name_layout.setSpacing(2)
+
+                name_label = QLabel(param_name)
+                name_label.setStyleSheet("""
                     font-weight: bold;
                     color: #2c3e50;
-                    padding: 8px;
-                    background-color: {bg_color};
                 """)
-                grid_layout.addWidget(name_label, row, 0)
+                name_layout.addWidget(name_label)
+
+                if 'description' in param_def:
+                    desc_label = QLabel(f"({param_def['description']})")
+                    desc_label.setStyleSheet("""
+                        font-style: italic;
+                        color: #666666;
+                        font-size: 11px;
+                    """)
+                    name_layout.addWidget(desc_label)
+
+                name_container.setStyleSheet(f"background-color: {bg_color};")
+                self.grid_layout.addWidget(name_container, row, 0)
                 
                 # Get display type and create appropriate widget
                 display_type = param_def.get('display_type', 'text')
-                container = None
-                widget = None
-                
                 try:
-                    from gui.widgets.widget_factory import (
-                        create_spinner_widget, 
-                        create_dropdown_widget,
-                        create_toggle_widget,
-                        create_range_pair_widget,
-                        create_color_picker_widget,
-                        create_triple_range_widget,
-                        create_text_widget
-                    )
-
+                    # Create the widget
                     if display_type == 'text_input':
                         container, widget = create_text_widget(param_name, param_def)
                     elif display_type == 'spinner':
@@ -317,28 +324,18 @@ class MainWindow(QtWidgets.QMainWindow):
                             background-color: {bg_color};
                             padding: 4px;
                         """)
-                        grid_layout.addWidget(container, row, 1)
+                        self.grid_layout.addWidget(container, row, 1)
                         
                         # Set value based on widget type
-                        if isinstance(widget, QtWidgets.QLineEdit):
+                        if isinstance(widget, QLineEdit):
                             widget.setText(str(value))
-                            #print(f"DEBUG: Set text {value} for {param_name}")
-                        elif isinstance(widget, QtWidgets.QSpinBox):
+                        elif isinstance(widget, QSpinBox):
                             widget.setValue(int(value))
-                            #print(f"DEBUG: Set value {value} for {param_name}")
-                        elif isinstance(widget, QtWidgets.QComboBox):
-                            #print(f"\nDEBUG: Setting combo value for {param_name}")
-                            #print(f"DEBUG: Current value is {value}")
-                            #print(f"DEBUG: Available items:", [widget.itemText(i) for i in range(widget.count())])
-                            #print(f"DEBUG: Available data:", [widget.itemData(i) for i in range(widget.count())])
+                        elif isinstance(widget, QComboBox):
                             index = widget.findData(str(value))
-                            #print(f"DEBUG: Found index: {index}")
                             if index >= 0:
                                 widget.setCurrentIndex(index)
-                                #print(f"DEBUG: Set combo index {index} for {param_name}")
-                            else:
-                                print(f"DEBUG: Could not find matching data for value {value}")
-                        elif isinstance(widget, tuple):  # For range_pair or color_picker that return multiple widgets
+                        elif isinstance(widget, tuple):  # For range_pair or color_picker
                             if display_type == 'range_pair':
                                 min_val, max_val = map(int, value.split(','))
                                 widget[0].setValue(min_val)
@@ -357,16 +354,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
                 except Exception as e:
                     print(f"DEBUG: Error creating/setting widget for {param_name}: {e}")
-
-                # Description label
-                desc_label = QtWidgets.QLabel(param_def.get('description', ''))
-                desc_label.setWordWrap(True)
-                desc_label.setStyleSheet(f"""
-                    color: #666666;
-                    background-color: {bg_color};
-                    padding: 8px;
-                """)
-                grid_layout.addWidget(desc_label, row, 2)
                 
                 row += 1
 
