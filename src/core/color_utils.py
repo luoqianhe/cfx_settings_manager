@@ -125,6 +125,7 @@ def load_color_profiles(root_path: Path) -> dict:
     """Load color profiles from colors.txt."""
     profiles = {}
     current_profile = None
+    print('COLOR.TXT PATH:', root_path)
     
     try:
         with open(root_path / "colors.txt", "r") as f:

@@ -18,6 +18,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
        super().__init__()
        self.folder_path = None
+       self.file_handler = None
+       self.color_profiles = {}  # Will store loaded color profiles
+       self.grafx_profiles = {}  # Will store loaded grafx profiles
        self.setWindowTitle("CFX Settings Manager")
        self.setMinimumSize(1024, 768)
        
@@ -73,6 +76,29 @@ class MainWindow(QtWidgets.QMainWindow):
                     f"The selected folder has the following issues:\n{error_msg}"
                 )
                 return
+
+            # Load color profiles
+            from core.color_utils import load_color_profiles
+            self.color_profiles = load_color_profiles(self.folder_path)
+            print(f"Loaded {len(self.color_profiles)} color profiles")
+            
+            # Load GraFx profiles
+            print("Loading GraFx profiles...")
+            grafx_path = self.folder_path / 'extra' / 'grafx'
+            self.grafx_profiles = {}
+            if grafx_path.exists():
+                for item in grafx_path.iterdir():
+                    if item.is_dir() and item.name[0].isdigit():
+                        try:
+                            # Extract number and name
+                            number = int(item.name.split('-')[0])
+                            # Skip any category prefix
+                            name = '-'.join(item.name.split('-')[1:])
+                            self.grafx_profiles[number] = name
+                            print(f"Found GraFx profile {number}: {name}")
+                        except (ValueError, IndexError):
+                            continue
+            print(f"Loaded {len(self.grafx_profiles)} GraFx profiles")
             
             # Clear and populate font list
             self.font_list.clear()
@@ -167,6 +193,7 @@ class MainWindow(QtWidgets.QMainWindow):
             
             # Determine which color profile to use
             color_num = settings.get('start_color')
+            print(f"\nDEBUG: Initial color_num from settings: {color_num}")
             if color_num == '-1' and 'color' in font_prefs:
                 color_num = font_prefs['color']
                 print(f"DEBUG: Using color {color_num} from prefs.txt")
@@ -187,7 +214,9 @@ class MainWindow(QtWidgets.QMainWindow):
             if color_num and color_num != '-1':
                 color_profile = self.file_handler.load_color_profile(int(color_num))
                 if color_profile:
+                    print(f"DEBUG: Loaded color profile: {color_profile}")
                     settings.update(color_profile)
+                    print(f"DEBUG: Settings after update: {settings.get('start_color')}")
                 else:
                     print(f"DEBUG: Failed to load color profile {color_num}")
             
@@ -204,7 +233,7 @@ class MainWindow(QtWidgets.QMainWindow):
         
     def display_settings(self, settings):
         try:
-            print("\nDEBUG: Displaying settings:", settings)
+            #print("\nDEBUG: Displaying settings:", settings)
             
             # Create and configure scroll area widget
             scroll_widget = QtWidgets.QWidget()
@@ -293,15 +322,22 @@ class MainWindow(QtWidgets.QMainWindow):
                         # Set value based on widget type
                         if isinstance(widget, QtWidgets.QLineEdit):
                             widget.setText(str(value))
-                            print(f"DEBUG: Set text {value} for {param_name}")
+                            #print(f"DEBUG: Set text {value} for {param_name}")
                         elif isinstance(widget, QtWidgets.QSpinBox):
                             widget.setValue(int(value))
-                            print(f"DEBUG: Set value {value} for {param_name}")
+                            #print(f"DEBUG: Set value {value} for {param_name}")
                         elif isinstance(widget, QtWidgets.QComboBox):
+                            #print(f"\nDEBUG: Setting combo value for {param_name}")
+                            #print(f"DEBUG: Current value is {value}")
+                            #print(f"DEBUG: Available items:", [widget.itemText(i) for i in range(widget.count())])
+                            #print(f"DEBUG: Available data:", [widget.itemData(i) for i in range(widget.count())])
                             index = widget.findData(str(value))
+                            #print(f"DEBUG: Found index: {index}")
                             if index >= 0:
                                 widget.setCurrentIndex(index)
-                                print(f"DEBUG: Set combo index {index} for {param_name}")
+                                #print(f"DEBUG: Set combo index {index} for {param_name}")
+                            else:
+                                print(f"DEBUG: Could not find matching data for value {value}")
                         elif isinstance(widget, tuple):  # For range_pair or color_picker that return multiple widgets
                             if display_type == 'range_pair':
                                 min_val, max_val = map(int, value.split(','))

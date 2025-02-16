@@ -185,6 +185,3 @@ class CFXValidator:
             errors.append(f"Error reading font config file: {str(e)}")
             
         return len(errors) == 0, errors, settings if len(errors) == 0 else None
-    
-print("In validators.py")
-print("Defined CFXValidator:", 'CFXValidator' in vars())

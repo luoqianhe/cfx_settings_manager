@@ -3,11 +3,6 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from core.validators import CFXValidator
 
-print("In file_handler.py")
-print("Imported validators:", vars())
-print("CFXValidator imported:", 'CFXValidator' in vars())
-print("Local variables:", locals())
-
 class CFXFileHandler:
     """Handles all file operations for CFX settings."""
     
@@ -300,6 +295,3 @@ class CFXFileHandler:
             print(f"Error finding shared profiles: {e}")
             
         return shared_fonts
-
-print("In file_handler.py")
-print("Imported validators:", vars())

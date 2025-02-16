@@ -68,6 +68,7 @@ def create_dropdown_widget(param_name: str, param_def: dict, main_window=None):
         print(f"DEBUG: Has color_profiles: {hasattr(main_window, 'color_profiles')}")
         if hasattr(main_window, 'color_profiles'):
             print(f"DEBUG: Number of color profiles: {len(main_window.color_profiles)}")
+    
     container = QtWidgets.QWidget()
     layout = QtWidgets.QVBoxLayout(container)
     layout.setContentsMargins(4, 4, 4, 4)
@@ -75,16 +76,29 @@ def create_dropdown_widget(param_name: str, param_def: dict, main_window=None):
     combo = QtWidgets.QComboBox()
     
     # Special handling for color profile selection
-    if param_name == 'color' and main_window and hasattr(main_window, 'color_profiles'):
+    if param_name == 'start_color' and main_window and hasattr(main_window, 'color_profiles'):
         for profile_num in sorted(main_window.color_profiles.keys()):
             if 'color_name' in main_window.color_profiles[profile_num]:
                 desc = main_window.color_profiles[profile_num]['color_name']
                 display_text = f"Color profile {profile_num} ({desc})"
                 combo.addItem(display_text, str(profile_num))
+    
+    # Special handling for GraFx profiles
+    elif param_name in ['style_grafx1', 'style_grafx2', 'style_grafx3']:
+        # Add "none" option
+        combo.addItem("None", "-1")
+        print(f"Creating GraFx dropdown for {param_name}")
+        print(f"Main window has grafx profiles: {hasattr(main_window, 'grafx_profiles')}")
+        if main_window and hasattr(main_window, 'grafx_profiles'):
+            print(f"Number of GraFx profiles: {len(main_window.grafx_profiles)}")
+            print(f"GraFx profiles: {main_window.grafx_profiles}")
+            for profile_num, name in sorted(main_window.grafx_profiles.items()):
+                combo.addItem(f"Profile {profile_num}: {name}", str(profile_num))
+    
     # Regular dropdown with values from param_def
     elif 'values' in param_def:
         for value, description in param_def['values'].items():
-            combo.addItem(f"{value}: {description}", value)
+            combo.addItem(f"{description}", value)
             
     layout.addWidget(combo)
     return container, combo

@@ -22,7 +22,7 @@
         "13": "Split-out"
     }
 },
-  "color": {
+  "start_color": {
     "type": "integer",
     "range": [0, 31],
     "description": "Main blade color profile selection", 

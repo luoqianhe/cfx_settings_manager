@@ -189,7 +189,7 @@ class ColorEditDialog(BaseEditDialog):
             'text': TextEditDialog
         }
         
-        if 'values' in constraints or param_name == 'color':
+        if 'values' in constraints or param_name == 'start_color':
             return EnumEditDialog(param_name, current_value, constraints, parent, main_window)
         
         return dialog_classes.get(param_type, TextEditDialog)(
