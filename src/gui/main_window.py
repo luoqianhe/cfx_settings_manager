@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
     QLabel, QPushButton, QFileDialog, QMessageBox, QScrollArea,
     QLineEdit, QSpinBox, QComboBox
 )
+from PySide6.QtCore import Qt
+from gui.widgets.settings_grid import SettingsGrid
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
@@ -34,19 +36,96 @@ class MainWindow(QtWidgets.QMainWindow):
        self.setCentralWidget(central)
        layout = QtWidgets.QHBoxLayout(central)
        
-       # Left sidebar for font list
+       # Left sidebar container
+       left_container = QtWidgets.QWidget()
+       left_layout = QtWidgets.QVBoxLayout(left_container)
+       left_layout.setContentsMargins(8, 8, 8, 8)
+       
+       # Add header for soundfont list
+       header_label = QtWidgets.QLabel("Soundfont Folders")
+       header_label.setStyleSheet("""
+            font-weight: bold;
+            font-size: 14px;
+            padding: 4px;
+            background-color: #f0f0f0;
+            border: 1px solid #ddd;
+        """)
+       header_label.setMinimumHeight(30)
+       header_label.setAlignment(Qt.AlignCenter)
+       left_layout.addWidget(header_label)
+       
+       # Font list
        self.font_list = QtWidgets.QListWidget()
        self.font_list.itemClicked.connect(self.on_font_selected)
-       layout.addWidget(self.font_list, stretch=1)
+       left_layout.addWidget(self.font_list)
        
-       # Right side for parameters
-       self.param_widget = QtWidgets.QScrollArea()
-       self.param_widget.setWidgetResizable(True)
-       layout.addWidget(self.param_widget, stretch=3)
+       layout.addWidget(left_container, stretch=1)
        
-       # Add save button
+       # Right side container
+       right_container = QtWidgets.QWidget()
+       right_layout = QtWidgets.QVBoxLayout(right_container)
+       right_layout.setContentsMargins(8, 8, 8, 8)
+       
+       # Parameter Headers
+       headers_widget = QtWidgets.QWidget()
+       headers_layout = QtWidgets.QHBoxLayout(headers_widget)
+       headers_layout.setContentsMargins(8, 0, 0, 0)  # Set left margin to 8
+       
+       param_header = QtWidgets.QLabel("Parameter")
+       value_header = QtWidgets.QLabel("Value")
+       # Update the header style to remove padding
+       header_style = """
+       font-weight: bold;
+       font-size: 14px;
+       background-color: #f0f0f0;
+       border: 1px solid #ddd;
+       """
+       # Add padding directly to the labels
+       param_header.setContentsMargins(8, 4, 4, 4)  # Left padding of 8
+       value_header.setContentsMargins(8, 4, 4, 4)  # Left padding of 8
+       param_header.setStyleSheet(header_style)
+       value_header.setStyleSheet(header_style)
+       param_header.setMinimumHeight(30)
+       param_header.setFixedWidth(150)
+       value_header.setMinimumHeight(30)
+       value_header.setFixedWidth(400)
+       
+       headers_layout.addWidget(param_header)
+       headers_layout.addWidget(value_header)
+       
+       # Scroll area for settings grids
+       scroll_area = QtWidgets.QScrollArea()
+       scroll_area.setWidgetResizable(True)
+       scroll_area.setFrameShape(QtWidgets.QFrame.NoFrame)
+       
+       # Container for settings grids
+       settings_container = QtWidgets.QWidget()
+       settings_layout = QtWidgets.QVBoxLayout(settings_container)
+       
+       # Create two settings grids
+       self.font_settings_grid = SettingsGrid(
+           "Font Configuration Settings", 
+           self
+       )
+       self.blade_settings_grid = SettingsGrid(
+           "Blade Profile Settings",
+           self
+       )
+       
+       settings_layout.addWidget(self.font_settings_grid)
+       settings_layout.addWidget(self.blade_settings_grid)
+       
+       # Add everything to right side
+       right_layout.addWidget(headers_widget)  # Headers stay at top
+       scroll_area.setWidget(settings_container)
+       right_layout.addWidget(scroll_area)  # Scrollable content below
+       
+       # Save button at bottom
        save_button = QtWidgets.QPushButton("Save Changes")
        save_button.clicked.connect(self.save_changes)
+       right_layout.addWidget(save_button)
+       
+       layout.addWidget(right_container, stretch=3)
        
        self.prompt_for_folder()
 
@@ -235,142 +314,18 @@ class MainWindow(QtWidgets.QMainWindow):
                 "Error",
                 f"Failed to load settings: {str(e)}"
             )
-    
+
     def display_settings(self, settings: dict, shared_with: list = None):
         """Update displayed settings."""
         try:
-            # Create scroll area widget
-            scroll_widget = QWidget()
-            scroll_widget.setContentsMargins(0, 0, 0, 0)
-            main_layout = QVBoxLayout(scroll_widget)
-            main_layout.setSpacing(0)
-            main_layout.setContentsMargins(0, 0, 0, 0)
-
-            # Create settings grid widget
-            grid_widget = QWidget()
-            self.grid_layout = QGridLayout(grid_widget)
-            self.grid_layout.setSpacing(12)
-            self.grid_layout.setColumnStretch(1, 1)  # Make value column stretch
-            
-            # Headers
-            headers = ["Parameter", "Value"]
-            for col, text in enumerate(headers):
-                label = QLabel(text)
-                label.setStyleSheet("""
-                    font-weight: bold;
-                    color: #2c3e50;
-                    padding: 8px 4px;
-                    border-bottom: 2px solid #3498db;
-                """)
-                self.grid_layout.addWidget(label, 0, col)
-
-            # Process settings and create widgets
-            row = 1
-            for param_name, value in settings.items():
-                param_def = self.get_parameter_definition(param_name)
-                if not param_def:
-                    continue
-
-                # Background color for row
-                bg_color = "#f8f9fa" if row % 2 == 0 else "white"
-                
-                # Parameter name and description
-                name_container = QWidget()
-                name_layout = QVBoxLayout(name_container)
-                name_layout.setContentsMargins(8, 4, 8, 4)
-                name_layout.setSpacing(2)
-
-                name_label = QLabel(param_name)
-                name_label.setStyleSheet("""
-                    font-weight: bold;
-                    color: #2c3e50;
-                """)
-                name_layout.addWidget(name_label)
-
-                if 'description' in param_def:
-                    desc_label = QLabel(f"({param_def['description']})")
-                    desc_label.setStyleSheet("""
-                        font-style: italic;
-                        color: #666666;
-                        font-size: 11px;
-                    """)
-                    name_layout.addWidget(desc_label)
-
-                name_container.setStyleSheet(f"background-color: {bg_color};")
-                self.grid_layout.addWidget(name_container, row, 0)
-                
-                # Get display type and create appropriate widget
-                display_type = param_def.get('display_type', 'text')
-                try:
-                    # Create the widget
-                    if display_type == 'text_input':
-                        container, widget = create_text_widget(param_name, param_def)
-                    elif display_type == 'spinner':
-                        container, widget = create_spinner_widget(param_name, param_def)
-                    elif display_type == 'dropdown':
-                        container, widget = create_dropdown_widget(param_name, param_def, self)
-                    elif display_type == 'toggle':
-                        container, widget = create_toggle_widget(param_name, param_def)
-                    elif display_type == 'range_pair':
-                        container, widget = create_range_pair_widget(param_name, param_def)
-                    elif display_type == 'color_picker':
-                        container, widget = create_color_picker_widget(param_name, param_def)
-                    elif display_type == 'triple_range':
-                        container, widget = create_triple_range_widget(param_name, param_def)
-
-                    if container:
-                        # Style container
-                        container.setStyleSheet(f"""
-                            background-color: {bg_color};
-                            padding: 4px;
-                        """)
-                        self.grid_layout.addWidget(container, row, 1)
+            # Update both grids
+            self.font_settings_grid.update_settings(settings)
+            self.blade_settings_grid.update_settings(settings, shared_with)
                         
-                        # Set value based on widget type
-                        if isinstance(widget, QLineEdit):
-                            widget.setText(str(value))
-                        elif isinstance(widget, QSpinBox):
-                            widget.setValue(int(value))
-                        elif isinstance(widget, QComboBox):
-                            index = widget.findData(str(value))
-                            if index >= 0:
-                                widget.setCurrentIndex(index)
-                        elif isinstance(widget, tuple):  # For range_pair or color_picker
-                            if display_type == 'range_pair':
-                                min_val, max_val = map(int, value.split(','))
-                                widget[0].setValue(min_val)
-                                widget[1].setValue(max_val)
-                            elif display_type == 'triple_range':
-                                angle, min_val, max_val = map(int, value.split(','))
-                                widget[0].setValue(angle)
-                                widget[1].setValue(min_val)
-                                widget[2].setValue(max_val)
-                            elif display_type == 'color_picker':
-                                r, g, b, w = map(int, value.split(','))
-                                widget[0]['R'][1].setValue(r)
-                                widget[0]['G'][1].setValue(g)
-                                widget[0]['B'][1].setValue(b)
-                                widget[0]['W'][1].setValue(w)
-
-                except Exception as e:
-                    print(f"DEBUG: Error creating/setting widget for {param_name}: {e}")
-                
-                row += 1
-
-            # Add grid widget to main layout
-            main_layout.addWidget(grid_widget)
-
-            # Clear any existing widget in the scroll area
-            if self.param_widget.widget():
-                self.param_widget.widget().deleteLater()
-
-            # Set new widget
-            self.param_widget.setWidget(scroll_widget)
-
         except Exception as e:
             print(f"Error displaying settings: {e}")
             QtWidgets.QMessageBox.warning(self, "Error", f"Failed to display settings: {str(e)}")
-    
+            
     def edit_parameter(self, param_name, current_value):
         try:
             param_def = self.get_parameter_definition(param_name)
