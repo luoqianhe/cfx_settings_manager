@@ -1,255 +1,1472 @@
 {
-  "blade_profile_parameters": {
-    "style_pon": {
+    "gate": {
     "type": "integer",
-    "range": [0, 13],
-    "description": "Power-on effect style",
-    "display_type": "dropdown",
+    "range": [0, 200],
+    "description": "Minimum motion quantity required to start the motion recognition engine",
+    "display_type": "spinner",
+    "parameter_category": "Motion and Gesture detection",
+    "notes": "Default value: 50. Base value between 15 to 70 works fine"
+    },
+
+    "smooth_gate": {
+        "type": "integer",
+        "range": [0, 200],
+        "description": "Minimum required to start the smoothswing engine",
+        "display_type": "spinner",
+        "parameter_category": "Motion and Gesture detection",
+        "notes": "Usually the same as the gate parameter"
+    },
+
+    "hswing": {
+        "type": "integer",
+        "range": [0, 2000],
+        "description": "Swing threshold",
+        "display_type": "spinner",
+        "parameter_category": "Motion and Gesture detection"
+    },
+
+    "hslash": {
+        "type": "integer",
+        "range": [0, 2000],
+        "description": "Slash threshold",
+        "display_type": "spinner",
+        "parameter_category": "Motion and Gesture detection"
+    },
+
+    "hhybrid": {
+        "type": "integer",
+        "range": [0, 2000],
+        "description": "Hybrid or accent swing threshold when using a smoothswing font",
+        "display_type": "spinner",
+        "parameter_category": "Motion and Gesture detection"
+    },
+
+    "hforce": {
+        "type": "integer",
+        "range": [0, 2000],
+        "description": "Threshold to trigger force fx",
+        "display_type": "spinner",
+        "parameter_category": "Motion and Gesture detection"
+    },
+
+    "hfclash": {
+        "type": "integer",
+        "range": [0, 2000],
+        "description": "Threshold to trigger a force clash fx",
+        "display_type": "spinner",
+        "parameter_category": "Motion and Gesture detection"
+    },
+
+    "hclash": {
+        "type": "integer",
+        "range": [0, 2000],
+        "description": "Clash threshold",
+        "display_type": "spinner",
+        "parameter_category": "Motion and Gesture detection"
+    },
+
+    "hspin": {
+        "type": "integer",
+        "range": [0, 2000],
+        "description": "Spin threshold",
+        "display_type": "spinner",
+        "parameter_category": "Motion and Gesture detection"
+    },
+
+    "htwist": {
+        "type": "integer",
+        "range": [0, 2000],
+        "description": "Twist threshold",
+        "display_type": "spinner",
+        "parameter_category": "Motion and Gesture detection"
+    },
+
+    "htemp": {
+        "type": "integer",
+        "range": [0, 150],
+        "description": "The temperature threshold",
+        "display_type": "spinner",
+        "parameter_category": "Motion and Gesture detection",
+        "notes": "Not a gesture/motion parameter but hosted with the other thresholds"
+    },
+    "swing_flow": {
+        "type": "integer",
+        "range": [0, 2000],
+        "description": "Swing rate flow limiter",
+        "display_type": "spinner",
+        "parameter_category": "Gesture Flows and Priorities",
+        "notes": "Delay (in ms) during which swings cannot be furthermore triggered"
+    },
+
+    "clash_flow": {
+        "type": "integer",
+        "range": [0, 2000],
+        "description": "Clash rate flow limiter",
+        "display_type": "spinner",
+        "parameter_category": "Gesture Flows and Priorities",
+        "notes": "Delay (in ms) during which clashes cannot be furthermore triggered"
+    },
+
+    "spin_flow": {
+        "type": "integer",
+        "range": [0, 2000],
+        "description": "Spin rate flow limiter",
+        "display_type": "spinner",
+        "parameter_category": "Gesture Flows and Priorities",
+        "notes": "Delay (in ms) during which spins cannot be furthermore triggered"
+    },
+
+    "smooth_flow": {
+        "type": "integer",
+        "range": [0, 2000],
+        "description": "Smoothswing rate flow limiter",
+        "display_type": "spinner",
+        "parameter_category": "Gesture Flows and Priorities",
+        "notes": "Delay (in ms) during which a smoothswing pair change cannot be triggered"
+    },
+    "debug": {
+    "type": "integer",
+    "range": [0, 1],
+    "description": "Enables the board debug which outputs extensive logs of the board activity",
+    "display_type": "toggle",
+    "parameter_category": "Sound/Interaction Parameters",
     "values": {
-        "0": "Normal/regular power-on with scrolling",
-        "1": "Lightstick style",
-        "2": "Simple flare style",
-        "3": "Base flare style",
-        "4": "Tip flare style",
-        "5": "Full flare style",
-        "6": "Crumble style",
-        "7": "Quicksilver style",
-        "8": "Mercury style",
-        "9": "Catchup style",
-        "10": "GraFx sequence",
-        "11": "Inverted ignition",
-        "12": "Split-in",
-        "13": "Split-out"
-    }
+        "0": "Debug disabled",
+        "1": "Debug enabled"
+    },
+    "notes": "Should be enabled only when troubleshooting the board as the verbose log will slow down boot time. Turn off when configuring with RICE to avoid verbose echo"
 },
-  "start_color": {
+
+    "logport": {
+        "type": "integer",
+        "range": [0, 4],
+        "description": "Defines where the debug / logged information is sent",
+        "display_type": "dropdown",
+        "parameter_category": "Sound/Interaction Parameters",
+        "values": {
+            "0": "USB serial port",
+            "1": "TTL (legacy RICE) serial port",
+            "2": "Both USB and TTL ports",
+            "3": "WebUSB",
+            "4": "All serial ports"
+        }
+    },
+
+    "vol": {
+        "type": "integer",
+        "range": [0, 100],
+        "description": "Digital volume setup",
+        "display_type": "spinner",
+        "parameter_category": "Sound/Interaction Parameters",
+        "notes": "0 mutes the sound output, 100 is maximum volume"
+    },
+
+    "menuvol": {
+        "type": "integer",
+        "range": [0, 100],
+        "description": "Digital volume of the vocal menu",
+        "display_type": "spinner",
+        "parameter_category": "Sound/Interaction Parameters"
+    },
+
+    "menugest": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Enables saber motions for browsing/selecting options in vocal menu",
+        "display_type": "toggle",
+        "parameter_category": "Sound/Interaction Parameters",
+        "values": {
+            "0": "Disabled",
+            "1": "Enabled"
+        },
+        "notes": "Twist left/right moves to previous/next bank, bang validates selected font"
+    },
+
+    "trackgest": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Enables track selection by pressing activator and twisting hilt",
+        "display_type": "toggle",
+        "parameter_category": "Sound/Interaction Parameters",
+        "values": {
+            "0": "Disabled",
+            "1": "Enabled"
+        },
+        "notes": "Works if font has local tracks or in iSaber mode"
+    },
+
+    "fontgest": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Enables loading next font by pressing activator and clashing blade",
+        "display_type": "toggle",
+        "parameter_category": "Sound/Interaction Parameters",
+        "values": {
+            "0": "Disabled - toggles blade PLI in single switch mode",
+            "1": "Enabled"
+        }
+    },
+
+    "beep": {
+        "type": "integer",
+        "range": [0, 100],
+        "description": "Sets the volume of user interface sounds and system beeps",
+        "display_type": "spinner",
+        "parameter_category": "Sound/Interaction Parameters"
+    },
+
+    "muteoff": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Defines if power-off sound plays when Mute-on-the-Go engaged",
+        "display_type": "toggle",
+        "parameter_category": "Sound/Interaction Parameters",
+        "values": {
+            "0": "No power-off sound when muted",
+            "1": "Play power-off sound when muted"
+        }
+    },
+
+    "muteb": {
+        "type": "integer",
+        "range": [0, 3],
+        "description": "Enables mute-on-the-boot feature",
+        "display_type": "dropdown",
+        "parameter_category": "Sound/Interaction Parameters",
+        "notes": "Controls volume of boot sound with angle of hilt. If enabled, also controls menu volume"
+    },
+
+    "switch": {
+        "type": "integer",
+        "range": [0, 3],
+        "description": "Selects switch type for saber activation",
+        "display_type": "dropdown",
+        "parameter_category": "Sound/Interaction Parameters",
+        "values": {
+            "0": "Normally-open switch",
+            "1": "Normally-closed switch",
+            "2": "Momentary switch (recommended)",
+            "3": "Single switch"
+        }
+    },
+
+    "sleep": {
+        "type": "integer",
+        "range": [0, 18446744073709551615],
+        "description": "Time before sound board enters sleep mode",
+        "display_type": "spinner",
+        "parameter_category": "Sound/Interaction Parameters",
+        "notes": "Value in milliseconds (e.g., 300,000 = 5 minutes). 0 to disable. Turns off idle accent sequence"
+    },
+
+    "deep": {
+        "type": "integer",
+        "range": [0, 18446744073709551615],
+        "description": "Time before sound board enters deep sleep mode",
+        "display_type": "spinner",
+        "parameter_category": "Sound/Interaction Parameters",
+        "notes": "Value in milliseconds. Counter starts after sleep mode. Sleep and Deep Sleep durations are cumulative. <0.25mA power usage"
+    },
+
+    "qkignite": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Enables blade ignition right after waking from deep sleep",
+        "display_type": "toggle",
+        "parameter_category": "Sound/Interaction Parameters",
+        "values": {
+            "0": "Normal boot",
+            "1": "Quick ignite (skips boot sound)"
+        }
+    },
+
+    "orient": {
+        "type": "integer",
+        "range": [0, 3],
+        "description": "Defines the board plane orientation in the hilt",
+        "display_type": "dropdown",
+        "parameter_category": "Sound/Interaction Parameters"
+    },
+
+    "valsnd": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Controls soundbank description sound in vocal menu",
+        "display_type": "toggle",
+        "parameter_category": "Sound/Interaction Parameters",
+        "values": {
+            "0": "Disabled - faster selection",
+            "1": "Enabled - repeats font.wav"
+        },
+        "notes": "When disabled, saves time in selection and disables aux switch confirmation for reboot"
+    },
+
+    "offp": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Anti power off protection (A-POP)",
+        "display_type": "toggle",
+        "parameter_category": "Sound/Interaction Parameters",
+        "values": {
+            "0": "Disabled",
+            "1": "Enabled - requires aux button confirmation"
+        },
+        "notes": "When enabled, requires activation button press followed by aux button press to power off"
+    },
+    "offd": {
     "type": "integer",
-    "range": [0, 31],
-    "description": "Main blade color profile selection", 
-    "display_type": "dropdown"
-},
-    "focl": {
-   "type": "integer",
-   "range": [0, 1],
-   "description": "FoC Color Lock",
-   "display_type": "toggle",
-   "values": {
-       "0": "Disabled - uses FoC color",
-       "1": "Enabled - locks to blade color"
+    "range": [0, 10000],
+    "description": "Anti power-off delay",
+    "display_type": "spinner",
+    "parameter_category": "Sound/Interaction Parameters",
+    "notes": "Values from 100 to 500 ms are relevant for preventing accidental turn-off. Set to zero if using offp parameter"
     },
-    "twon": {
-    "type": "range_pair",
-    "range": [-1800, 1800],
-    "description": "Twist-on behavior range",
-    "display_type": "triple_range",
-    "format": "angle,min,max"
-},
-"pname": {
-    "type": "text",
-    "description": "Profile name",
-    "display_type": "text_input"
-}
-  },
-    "unstable": {
-      "type": "integer",
-      "range": [0, 18],
-      "description": "Blade effect type",
-      "display_type": "dropdown",
-      "values": {
-        "0": "None - inherits from regular blade",
-        "1": "Unstable blade",
-        "2": "Flame (legacy fire)",
-        "3": "Rain Sizzle",
-        "4": "Chainsaw",
-        "5": "Starkiller",
-        "6": "Unstable TFU",
-        "7": "Gradient",
-        "8": "Wave",
-        "9": "Rainbow",
-        "10": "Theater chase",
-        "11": "Sauron",
-        "12": "Sauron II",
-        "13": "Jedi Fallen Order",
-        "14": "Knight Rider / Energy Beam",
-        "15": "Generative Unstable Fire",
-        "16": "Bicolor Pulse Fx",
-        "17": "GraFx powered blade",
-        "18": "Vision fx (GraFx powered PoV)"
-      }
+
+    "onp": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Anti power-on protection",
+        "display_type": "toggle",
+        "parameter_category": "Sound/Interaction Parameters",
+        "values": {
+            "0": "Disabled",
+            "1": "Enabled - requires aux button confirmation"
+        },
+        "notes": "When enabled, requires aux button press after activation switch to ignite blade"
     },
-    "style_lockup": {
-      "type": "integer",
-      "range": [1, 7],
-      "description": "Lockup effect style",
-      "display_type": "dropdown",
-      "values": {
-        "1": "Legacy lockup all over blade",
-        "2": "Localized legacy lockup",
-        "3": "Noise localized lockup",
-        "4": "Alternate noise variant",
-        "5": "Flare lockup",
-        "6": "Unicorn rainbow lockup",
-        "7": "GraFx lockup sequence"
-      }
+
+    "ond": {
+        "type": "integer",
+        "range": [0, 10000],
+        "description": "Power-on delay and double click time base",
+        "display_type": "spinner",
+        "parameter_category": "Sound/Interaction Parameters",
+        "notes": "Values of 20 to 50ms are relevant"
     },
-    "style_clash": {
-      "type": "integer",
-      "range": [1, 7],
-      "description": "Flash on Clash (FoC) effect style",
-      "display_type": "dropdown",
-      "values": {
-        "1": "Legacy clash all over blade",
-        "2": "Full blade fade",
-        "3": "Random local fade",
-        "4": "Fixed local fade",
-        "5": "Base flare",
-        "6": "Unicorn clash",
-        "7": "Absorb effect"
-      }
+
+    "lockup": {
+        "type": "integer",
+        "range": [0, 2000],
+        "description": "Delay before triggering lockup effect on aux switch",
+        "display_type": "spinner",
+        "parameter_category": "Sound/Interaction Parameters",
+        "notes": "Short values (100-200) trigger almost immediately - requires quick release for blaster effect. Higher values allow more time for blaster blocking"
     },
-    "style_drag": {
-      "type": "integer",
-      "range": [1, 5],
-      "description": "Drag tip effect style",
-      "display_type": "dropdown",
-      "values": {
-        "1": "Simple/uniform noise",
-        "2": "Sparking with distributed sparks",
-        "3": "Gradient colored tip",
-        "4": "Gradient with heat map",
-        "5": "Flare drag with subtle noise"
-      }
+
+    "loop": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "iSaber track looping control",
+        "display_type": "toggle",
+        "parameter_category": "iSaber and Audio Player",
+        "values": {
+            "0": "Play once",
+            "1": "Loop endlessly"
+        }
     },
-    "style_flicker": {
-      "type": "integer",
-      "range": [0, 5],
-      "description": "Blade flicker effect style",
-      "display_type": "dropdown",
-      "values": {
-        "0": "Legacy flicker - homogeneous random",
-        "1": "Bicolor flicker with random mix",
-        "2": "Movie flicker with color bands",
-        "3": "Brownian noise",
-        "4": "Random noise variant",
-        "5": "Fire flicker"
-      }
+
+    "shuffle": {
+        "type": "integer",
+        "range": [0, 2],
+        "description": "iSaber track random selection parameter",
+        "display_type": "dropdown",
+        "parameter_category": "iSaber and Audio Player",
+        "notes": "Refer to Sound Fx Selection Modes"
     },
-    "flks": {
-      "type": "integer",
-      "range": [0, 500],
-      "min_ledstrip": 6,
-      "description": "Flicker speed/instability",
-      "display_type": "spinner",
-      "notes": "0=disabled, higher=more chaotic. Keep above 6 for LED strips. Lower values = subtle changes, higher values = damaged look"
+
+    "plilh": {
+        "type": "integer",
+        "range": [0, 10000],
+        "description": "Power level indicator range in millivolts",
+        "display_type": "spinner",
+        "parameter_category": "Sound/Interaction Parameters",
+        "notes": "Low and high boundaries for PLI. For single li-ion cell, typical values are 3400,4200"
     },
-    "flkd": {
-      "type": "integer",
-      "range": [0, 100],
-      "description": "Flicker depth %",
-      "display_type": "spinner",
-      "notes": "Controls how much brightness varies. Higher values create larger gaps in intensity"
+
+    "omnisense": {
+        "type": "integer",
+        "range": [0, 65000],
+        "description": "Omnisabers beaconing period in ms",
+        "display_type": "spinner",
+        "parameter_category": "Sound/Interaction Parameters",
+        "notes": "0 disables beaconing. Beaconing prevents deep sleep as it keeps board active"
     },
-    "shmrd": {
-      "type": "integer",
-      "range": [0, 100],
-      "description": "Shimmer duration",
-      "display_type": "spinner",
-      "notes": "Total duration of shimmer event during clash"
+
+    "masterpower": {
+        "type": "integer",
+        "range": [0, 100],
+        "description": "General control of blade brightness",
+        "display_type": "spinner",
+        "parameter_category": "Sound/Interaction Parameters",
+        "notes": "Applied on top of blade power sub-settings. Set by menu blade brightness/power for dynamic control"
     },
-    "shmrp": {
-      "type": "integer",
-      "range": [0, 100],
-      "description": "Shimmer period",
-      "display_type": "spinner"
+
+    "spectrum_mode": {
+        "type": "integer",
+        "range": [-1, 999],
+        "description": "Spectrum™ color and blade profile selection mode",
+        "display_type": "spinner",
+        "parameter_category": "Sound/Interaction Parameters",
+        "notes": "See dedicated paragraph on color profile browsing"
     },
-    "shmrr": {
-      "type": "integer",
-      "range": [0, 100],
-      "description": "Shimmer randomness",
-      "display_type": "spinner",
-      "notes": "0 = strobe effect, higher values = more irregular"
+
+    "spectrum_axis": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Spectrum™ color profile selection axis",
+        "display_type": "dropdown",
+        "parameter_category": "Sound/Interaction Parameters",
+        "values": {
+            "0": "Pitch (up/down)",
+            "1": "Roll (throttle)"
+        }
     },
-    "focd": {
-      "type": "integer",
-      "range": [0, 100],
-      "description": "Flash on Clash duration",
-      "display_type": "spinner"
+    "ledstrip": {
+    "type": "integer",
+    "range": [0, 280],
+    "description": "Number of pixels in main blade for ledstrip support",
+    "display_type": "spinner",
+    "parameter_category": "Ledstrip parameters",
+    "notes": "0 = high-power LED mode. For dual-strip blades, use single strip length (e.g., 120 for two 120-pixel strips)"
     },
-    "mapping_unstable": {
-      "type": "integer",
-      "range": [0, 2],
-      "description": "Unstable effect motion response",
-      "display_type": "dropdown",
-      "values": {
+
+    "auxstrip": {
+        "type": "integer",
+        "range": [0, 280],
+        "description": "Number of pixels in secondary blade",
+        "display_type": "spinner",
+        "parameter_category": "Ledstrip parameters",
+        "notes": "Rendered on the ledstrip output"
+    },
+
+    "tridentstrip": {
+        "type": "integer",
+        "range": [-280, 280],
+        "description": "Trident support in ledstrip mode",
+        "display_type": "spinner",
+        "parameter_category": "Ledstrip parameters",
+        "notes": "Defines quillons length and main blade offset. Positive = LS1 output, negative = LS2 output"
+    },
+
+    "accentstrip": {
+        "type": "integer",
+        "range": [-25, 25],
+        "description": "Pixel accents (sequencer) control",
+        "display_type": "spinner",
+        "parameter_category": "Ledstrip parameters",
+        "notes": "Positive = main blade & LS1 output, negative = LS2 output"
+    },
+
+    "dragstrip": {
+        "type": "integer",
+        "range": [0, 280],
+        "description": "Maximum size of drag tip effect in pixels",
+        "display_type": "spinner",
+        "parameter_category": "Ledstrip parameters"
+    },
+    "blastm": {
+    "type": "integer",
+    "range": [0, 1],
+    "description": "Blaster Move™ control",
+    "display_type": "toggle",
+    "parameter_category": "Blade Profile",
+    "values": {
         "0": "Disabled",
-        "1": "Swing speed",
-        "2": "Gyro/orientation"
-      }
+        "1": "Enabled"
     },
+    "notes": "Enables triggering blaster sounds with hilt motion after initial aux switch press"
+    },
+
+    "randb": {
+        "type": "integer",
+        "range": [0, 2],
+        "description": "Blaster blocking sounds selection mode",
+        "display_type": "dropdown",
+        "parameter_category": "Blade Profile"
+    },
+
+    "omnisabers": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Omnisabers feature control",
+        "display_type": "toggle",
+        "parameter_category": "Blade Profile",
+        "values": {
+            "0": "Disabled",
+            "1": "Enabled"
+        },
+        "notes": "Enables remote transmission of saber actions via serial port"
+    },
+
+    "wakeup": {
+        "type": "integer",
+        "range": [0, 2],
+        "description": "Motion wake-up control",
+        "display_type": "dropdown",
+        "parameter_category": "Blade Profile",
+        "values": {
+            "0": "Activator switch only",
+            "1": "Motion allows sleep exit",
+            "2": "Motion resets timer but cannot exit sleep"
+        }
+    },
+
+    "randc": {
+        "type": "integer",
+        "range": [0, 100],
+        "description": "Flash on Clash color randomization percentage",
+        "display_type": "spinner",
+        "parameter_category": "Blade Profile",
+        "notes": "Adds color variance to FoC. Also applies to blaster in HB LED mode"
+    },
+
+    "blastp": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Blaster priority control",
+        "display_type": "toggle",
+        "parameter_category": "Blade Profile",
+        "values": {
+            "0": "Clashes can interrupt blaster",
+            "1": "Blaster must finish"
+        },
+        "notes": "Determines if clash can interrupt blaster blocking sounds. Swings always disabled during blasters"
+    },
+
+    "random": {
+        "type": "integer",
+        "range": [0, 2],
+        "description": "Sound selection mode for clash, swing, spin and stab",
+        "display_type": "dropdown",
+        "parameter_category": "Blade Profile",
+        "values": {
+            "0": "Pure random",
+            "1": "Sequential",
+            "2": "Smart random (avoids repeats)"
+        }
+    },
+
+    "pom": {
+        "type": "integer",
+        "range": [0, 3],
+        "description": "Power-on sound selection mode",
+        "display_type": "dropdown",
+        "parameter_category": "Blade Profile",
+        "values": {
+            "0": "Angle-based + normal PoF",
+            "1": "Angle-based + special PoF",
+            "2": "Random + special PoF",
+            "3": "Always random"
+        }
+    },
+
+    "swon": {
+        "type": "integer",
+        "range": [0, 2000],
+        "description": "Threshold to turn saber on with swing",
+        "display_type": "spinner",
+        "parameter_category": "Blade Profile",
+        "notes": "Threshold only, no angular range - motion is free swing/spin"
+    },
+
+    "poi": {
+        "type": "integer",
+        "range": [0, 2],
+        "description": "Power-on interrupt control",
+        "display_type": "dropdown",
+        "parameter_category": "Blade Profile",
+        "values": {
+            "0": "No interruption",
+            "1": "Enable after quick-on timeout",
+            "2": "Enable at ignition start"
+        },
+        "notes": "Controls when sound effects can interrupt power-on sound"
+    },
+
+    "magic": {
+        "type": "integer",
+        "range": [0, 60000],
+        "description": "Magnetic activation threshold",
+        "display_type": "spinner",
+        "parameter_category": "Blade Profile",
+        "notes": "0 disables magnetic activation"
+    },
+
+    "saberlock": {
+        "type": "integer",
+        "range": [0, 3],
+        "description": "Magnetic field activation control",
+        "display_type": "dropdown",
+        "parameter_category": "Blade Profile",
+        "notes": "Controls activation using magnetic field (e.g. magnetic ring)"
+    },
+    "tridenton": {
+    "type": "integer",
+    "range": [0, 3000],
+    "description": "Delay of secondary blades for cross-guard saber",
+    "display_type": "spinner",
+    "parameter_category": "Trident/Staggered Ignition",
+    "notes": "Value in milliseconds. Should be less than power-on sound duration"
+    },
+
+    "tridentoff": {
+        "type": "integer",
+        "range": [0, 3000],
+        "description": "Delay of secondary blades during power-off",
+        "display_type": "spinner",
+        "parameter_category": "Trident/Staggered Ignition",
+        "notes": "Value in milliseconds. If zero, no Trident effect during blade retraction"
+    },
+
+    "tridentfx": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Trident effect mode",
+        "display_type": "toggle",
+        "parameter_category": "Trident/Staggered Ignition",
+        "values": {
+            "0": "Simple delay - all channels catch up together",
+            "1": "Split ramp - channels ramp independently"
+        },
+        "notes": "Mode differences are most noticeable when delay is less than half of power-on sound duration"
+    },
+
+    "tridentflk": {
+        "type": "integer",
+        "range": [0, 100],
+        "description": "Separate flicker control for Trident channels",
+        "display_type": "spinner",
+        "parameter_category": "Trident/Staggered Ignition",
+        "notes": "Allows cross-guard to flicker independently from main blade"
+    },
+
+    "tridentquick": {
+        "type": "integer",
+        "range": [0, 3000],
+        "description": "Forces Trident channel ignition time",
+        "display_type": "spinner",
+        "parameter_category": "Trident/Staggered Ignition",
+        "notes": "Value in milliseconds. If zero, channels ramp until end of power-on sound"
+    },
+    "bladepower": {
+    "type": "integer",
+    "range": [0, 100],
+    "description": "Master control over blade power percentage",
+    "display_type": "spinner",
+    "parameter_category": "Blade Fx",
+    "notes": "Reduces power without modifying colors"
+    },
+
+    "shmrd": {
+        "type": "integer",
+        "range": [20, 1000],
+        "description": "Duration of LED shimmering effect during clash",
+        "display_type": "spinner",
+        "parameter_category": "Blade Fx",
+        "notes": "Should not exceed associated sound duration"
+    },
+
+    "shmrp": {
+        "type": "integer",
+        "range": [10, 1000],
+        "description": "Periodicity of light bursts during clash effect",
+        "display_type": "spinner",
+        "parameter_category": "Blade Fx",
+        "notes": "Lower period produces tighter bursts"
+    },
+
+    "shmrr": {
+        "type": "integer",
+        "range": [10, 1000],
+        "description": "Random variation in burst periodicity during clash",
+        "display_type": "spinner",
+        "parameter_category": "Blade Fx",
+        "notes": "Adds randomness to burst timing for realism"
+    },
+
+    "focd": {
+        "type": "integer",
+        "range": [0, 1000],
+        "description": "Flash on Clash™ duration",
+        "display_type": "spinner",
+        "parameter_category": "Blade Fx"
+    },
+
+    "focp": {
+        "type": "integer",
+        "range": [10, 1000],
+        "description": "Periodicity of Flash on Clash™ bursts",
+        "display_type": "spinner",
+        "parameter_category": "Blade Fx",
+        "notes": "Lower period produces tighter bursts"
+    },
+
+    "focr": {
+        "type": "integer",
+        "range": [0, 1000],
+        "description": "Random variation in Flash on Clash™ burst timing",
+        "display_type": "spinner",
+        "parameter_category": "Blade Fx"
+    },
+
+    "focb": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Flash on Clash™ during Blaster Blocking",
+        "display_type": "toggle",
+        "parameter_category": "Blade Fx",
+        "values": {
+            "0": "Disabled",
+            "1": "Enabled"
+        }
+    },
+
+    "focf1": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Flash on Clash™ during Force effect",
+        "display_type": "toggle",
+        "parameter_category": "Blade Fx",
+        "values": {
+            "0": "Disabled",
+            "1": "Enabled"
+        }
+    },
+
+    "focf2": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Flash on Clash™ during Force Clash™",
+        "display_type": "toggle",
+        "parameter_category": "Blade Fx",
+        "values": {
+            "0": "Disabled",
+            "1": "Enabled"
+        }
+    },
+
+    "focf3": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Flash on Clash™ during StabFx™",
+        "display_type": "toggle",
+        "parameter_category": "Blade Fx",
+        "values": {
+            "0": "Disabled",
+            "1": "Enabled"
+        }
+    },
+
+    "qon": {
+        "type": "integer",
+        "range": [0, 10000],
+        "description": "Quick-on ignition duration",
+        "display_type": "spinner",
+        "parameter_category": "Blade Fx",
+        "notes": "Should not exceed power-on sound duration. Important for ledstrip scrolling"
+    },
+
+    "qoff": {
+        "type": "integer",
+        "range": [0, 10000],
+        "description": "Quick-off retraction duration",
+        "display_type": "spinner",
+        "parameter_category": "Blade Fx"
+    },
+
+    "ignd": {
+        "type": "integer",
+        "range": [0, 10000],
+        "description": "Ignition delay for ledstrips",
+        "display_type": "spinner",
+        "parameter_category": "Blade Fx",
+        "notes": "Delays scrolling/power-on fx. Set qon = desired_duration + ignd"
+    },
+
+    "retd": {
+        "type": "integer",
+        "range": [0, 10000],
+        "description": "Retraction delay for power-off fx",
+        "display_type": "spinner",
+        "parameter_category": "Blade Fx",
+        "notes": "Similar to ignd, adjust qoff accordingly"
+    },
+
+    "fade": {
+        "type": "integer",
+        "range": [0, 10000],
+        "description": "Color profile transition time",
+        "display_type": "spinner",
+        "parameter_category": "Blade Fx",
+        "notes": "Must be lower than color.wav sound duration"
+    },
+
+    "flks": {
+        "type": "integer",
+        "range": [2, 500],
+        "description": "Speed of energy variation/flickering effect",
+        "display_type": "spinner",
+        "parameter_category": "Blade Fx",
+        "notes": "Higher = damaged effect, lower = subtle changes. Keep above 6 for ledstrip. 0 disables"
+    },
+
+    "flkd": {
+        "type": "integer",
+        "range": [0, 100],
+        "description": "Depth of energy fluctuation effect",
+        "display_type": "spinner",
+        "parameter_category": "Blade Fx",
+        "notes": "Percentage range for LED brightness variation. 0 for static blade"
+    },
+
+    "flkon": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Blade flicker during power on",
+        "display_type": "toggle",
+        "parameter_category": "Blade Fx",
+        "values": {
+            "0": "Disabled",
+            "1": "Enabled"
+        }
+    },
+
+    "flkoff": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Blade flicker during power off",
+        "display_type": "toggle",
+        "parameter_category": "Blade Fx",
+        "values": {
+            "0": "Disabled",
+            "1": "Enabled"
+        }
+    },
+
+    "pulsel": {
+        "type": "integer",
+        "range": [0, 10000],
+        "description": "Pulse effect length",
+        "display_type": "spinner",
+        "parameter_category": "Blade Fx",
+        "notes": "Defines ramp up/down time"
+    },
+
+    "pulsed": {
+        "type": "integer",
+        "range": [0, 100],
+        "description": "Pulse effect depth percentage",
+        "display_type": "spinner",
+        "parameter_category": "Blade Fx",
+        "notes": "100% ranges from max brightness to off"
+    },
+
+    "on_fade": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Progressive fade in effect",
+        "display_type": "toggle",
+        "parameter_category": "Blade Fx",
+        "values": {
+            "0": "Disabled",
+            "1": "Enabled"
+        },
+        "notes": "ScrollFade™ feature when combined with ledstrip scrolling"
+    },
+
+    "off_fade": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Progressive fade out effect",
+        "display_type": "toggle",
+        "parameter_category": "Blade Fx",
+        "values": {
+            "0": "Disabled",
+            "1": "Enabled"
+        }
+    },
+
+    "over_pon": {
+        "type": "integer",
+        "range": [0, 4],
+        "description": "Power on effect blending style",
+        "display_type": "dropdown",
+        "parameter_category": "Blade Fx",
+        "values": {
+            "0": "Melt",
+            "1": "Overlay",
+            "2": "BlendFx",
+            "3": "Curtain",
+            "4": "GraFx Xfade"
+        },
+        "notes": "Controls how power-on effect blends with blade fx"
+    },
+
+    "over_poff": {
+        "type": "integer",
+        "range": [0, 2],
+        "description": "Power off effect blending style",
+        "display_type": "dropdown",
+        "parameter_category": "Blade Fx",
+        "values": {
+            "0": "Melt",
+            "1": "Overlay",
+            "2": "BlendFx"
+        },
+        "notes": "Similar to over_pon but for power off. No curtain mode available"
+    },
+    "fbolt": {
+    "type": "integer",
+    "range": [1, 100],
+    "description": "Bolt impact energy distribution and edge fading",
+    "display_type": "spinner",
+    "parameter_category": "AccuBolt",
+    "notes": "Percentage value. 100% = solid flash, 1% = maximum at center fading to edges"
+    },
+
+    "rbolt": {
+        "type": "integer",
+        "range": [0, 100],
+        "description": "Bolt impact color randomization",
+        "display_type": "spinner",
+        "parameter_category": "AccuBolt",
+        "notes": "Percentage value. Affects RGB components separately to alter hue"
+    },
+
+    "qbolt": {
+        "type": "integer",
+        "range": [0, 100],
+        "description": "Bolt impact speed",
+        "display_type": "spinner",
+        "parameter_category": "AccuBolt",
+        "notes": "Percentage value. 100% ensures bolt travels full blade during duration"
+    },
+
+    "hcool": {
+        "type": "integer",
+        "range": [0, 255],
+        "description": "High cooling factor for instability",
+        "display_type": "spinner",
+        "parameter_category": "Ledstrip Fx",
+        "notes": "Higher values make blade more unstable/active"
+    },
+
+    "lcool": {
+        "type": "integer",
+        "range": [0, 255],
+        "description": "Low cooling factor for instability",
+        "display_type": "spinner",
+        "parameter_category": "Ledstrip Fx",
+        "notes": "Lower values make blade return quicker to stable state"
+    },
+
+    "sparkf": {
+        "type": "integer",
+        "range": [0, 255],
+        "description": "Instability force",
+        "display_type": "spinner",
+        "parameter_category": "Ledstrip Fx"
+    },
+
+    "sparkd": {
+        "type": "integer",
+        "range": [0, 100],
+        "description": "Instability spread percentage",
+        "display_type": "spinner",
+        "parameter_category": "Ledstrip Fx",
+        "notes": "Percentage of blade length affected by instability"
+    },
+
+    "drift": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Instability contamination over blade",
+        "display_type": "toggle",
+        "parameter_category": "Ledstrip Fx",
+        "values": {
+            "0": "Disabled",
+            "1": "Enabled"
+        },
+        "notes": "Some fx have drift automatically enabled"
+    },
+
+    "mapb": {
+        "type": "integer",
+        "range": [0, 255],
+        "description": "Blade color instability effect",
+        "display_type": "spinner",
+        "parameter_category": "Ledstrip Fx",
+        "notes": "Higher values create darker spots in blade color"
+    },
+
+    "mapc": {
+        "type": "integer",
+        "range": [0, 255],
+        "description": "FoC color instability effect",
+        "display_type": "spinner",
+        "parameter_category": "Ledstrip Fx",
+        "notes": "Higher values produce brighter colored spots"
+    },
+
+    "refreshfx": {
+        "type": "integer",
+        "range": [6, 500],
+        "description": "Ledstrip fx refresh rate",
+        "display_type": "spinner",
+        "parameter_category": "Ledstrip Fx",
+        "notes": "Value in ms. Should be >= flicker speed. Higher values = slower refresh, good for effects like fire"
+    },
+
+    "style_poff": {
+        "type": "integer",
+        "range": [0, 13],
+        "description": "Power-off fx style",
+        "display_type": "dropdown",
+        "parameter_category": "Additional Fx Style Parameters"
+    },
+
+    "style_blaster": {
+        "type": "integer",
+        "range": [0, 13],
+        "description": "Blaster fx style",
+        "display_type": "dropdown",
+        "parameter_category": "Additional Fx Style Parameters"
+    },
+
+    "style_drag": {
+        "type": "integer",
+        "range": [0, 13],
+        "description": "Drag fx style",
+        "display_type": "dropdown",
+        "parameter_category": "Additional Fx Style Parameters"
+    },
+
+    "style_sbright": {
+        "type": "integer",
+        "range": [0, 13],
+        "description": "SwingBright fx style/mode",
+        "display_type": "dropdown",
+        "parameter_category": "Additional Fx Style Parameters"
+    },
+
+    "style_preon": {
+        "type": "integer",
+        "range": [0, 13],
+        "description": "Pre-on fx style",
+        "display_type": "dropdown",
+        "parameter_category": "Additional Fx Style Parameters"
+    },
+
+    "style_postoff": {
+        "type": "integer",
+        "range": [0, 13],
+        "description": "Post-off fx style",
+        "display_type": "dropdown",
+        "parameter_category": "Additional Fx Style Parameters"
+    },
+
+    "style_accents": {
+        "type": "integer",
+        "range": [0, 13],
+        "description": "Accent LEDs configuration file location",
+        "display_type": "dropdown",
+        "parameter_category": "Additional Fx Style Parameters",
+        "notes": "Links to /extra/ACCENTS indexed subfolders"
+    },
+
+    "style_pixies": {
+        "type": "integer",
+        "range": [0, 13],
+        "description": "Pixel accent configuration location",
+        "display_type": "dropdown",
+        "parameter_category": "Additional Fx Style Parameters",
+        "notes": "Links to /extra/PIXIES indexed subfolders"
+    },
+
+    "style_grafx": {
+        "type": "integer",
+        "range": [0, 13],
+        "description": "GraFx blades configuration location",
+        "display_type": "dropdown",
+        "parameter_category": "Additional Fx Style Parameters",
+        "notes": "Links to /extra/GRAFX indexed subfolders"
+    },
+
+    "pos_lockup": {
+        "type": "integer",
+        "range": [0, 280],
+        "description": "Localized lockup fx position",
+        "display_type": "spinner",
+        "parameter_category": "Additional Fx Style Parameters"
+    },
+
+    "size_lockup": {
+        "type": "integer",
+        "range": [0, 280],
+        "description": "Localized lockup fx size",
+        "display_type": "spinner",
+        "parameter_category": "Additional Fx Style Parameters"
+    },
+
+    "mapping_color": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Fx color map type",
+        "display_type": "toggle",
+        "parameter_category": "Additional Fx Style Parameters",
+        "values": {
+            "0": "Legacy mapping",
+            "1": "Heat mapping"
+        }
+    },
+
+    "mapping_sbright": {
+        "type": "integer",
+        "range": [0, 4],
+        "description": "Dynamic behavior of SwingBright fx",
+        "display_type": "dropdown",
+        "parameter_category": "Additional Fx Style Parameters"
+    },
+
+    "delay_sbright": {
+        "type": "integer",
+        "range": [0, 1000],
+        "description": "Cool down fx of swing bright",
+        "display_type": "spinner",
+        "parameter_category": "Additional Fx Style Parameters"
+    },
+
+    "mapping_flicker": {
+        "type": "integer",
+        "range": [0, 4],
+        "description": "Dynamic behavior of flicker fx",
+        "display_type": "dropdown",
+        "parameter_category": "Additional Fx Style Parameters"
+    },
+
+    "force_flicker": {
+        "type": "integer",
+        "range": [0, 255],
+        "description": "Spatial flicker intensity and randomness",
+        "display_type": "spinner",
+        "parameter_category": "Additional Fx Style Parameters"
+    },
+
+    "depth_flicker": {
+        "type": "integer",
+        "range": [0, 255],
+        "description": "Spatial flicker mixing depth with flicker color",
+        "display_type": "spinner",
+        "parameter_category": "Additional Fx Style Parameters"
+    },
+
+    "pos_flicker": {
+        "type": "integer",
+        "range": [0, 280],
+        "description": "Spatial flicker location on blade",
+        "display_type": "spinner",
+        "parameter_category": "Additional Fx Style Parameters"
+    },
+
+    "size_flicker": {
+        "type": "integer",
+        "range": [0, 280],
+        "description": "Spatial flicker spreading from location",
+        "display_type": "spinner",
+        "parameter_category": "Additional Fx Style Parameters",
+        "notes": "0 uses all the blade"
+    },
+    "hum_gain": {
+    "type": "integer",
+    "range": [0, 150],
+    "description": "Hum sound mixing parameter (beta)",
+    "display_type": "spinner",
+    "parameter_category": "Font Behavior",
+    "notes": "Dynamically adjusts hum strength without editing sound file"
+    },
+
+    "hum_delay": {
+        "type": "integer",
+        "range": [0, 99],
+        "description": "Hum crossfade mixing point during ignition (beta)",
+        "display_type": "spinner",
+        "parameter_category": "Font Behavior",
+        "notes": "Percentage of power-on sound duration. Best used with POI = 0 or 1 for smooth swing fonts"
+    },
+    "smooth_sharp": {
+    "type": "float",
+    "range": [0.01, 4.0],
+    "description": "Smoothswing motion mapping sharpness",
+    "display_type": "spinner",
+    "parameter_category": "Smoothswing Configuration",
+    "notes": "< 1.0 = softer response, > 1.0 = sharper response, 1.5 = exponential mapping"
+    },
+
+    "smooth_sens": {
+        "type": "integer",
+        "range": [0, 2000],
+        "description": "Smoothswing sensitivity to blade rotation",
+        "display_type": "spinner",
+        "parameter_category": "Smoothswing Configuration",
+        "notes": "In degrees/second. Lower values maximize volume with smaller motions"
+    },
+
+    "smooth_gain": {
+        "type": "integer",
+        "range": [0, 100],
+        "description": "Smoothswing effect volume",
+        "display_type": "spinner",
+        "parameter_category": "Smoothswing Configuration"
+    },
+
+    "smooth_dampen": {
+        "type": "integer",
+        "range": [0, 100],
+        "description": "Hum dampening during smoothswing",
+        "display_type": "spinner",
+        "parameter_category": "Smoothswing Configuration",
+        "notes": "Percentage reduction of hum volume when smoothswing pair plays"
+    },
+
+    "smooth_width1": {
+        "type": "integer",
+        "range": [0, 360],
+        "description": "First angular transition region",
+        "display_type": "spinner",
+        "parameter_category": "Smoothswing Configuration",
+        "notes": "Lower value starts pitch offset early in motion"
+    },
+
+    "smooth_width2": {
+        "type": "integer",
+        "range": [0, 360],
+        "description": "Second angular transition region",
+        "display_type": "spinner",
+        "parameter_category": "Smoothswing Configuration",
+        "notes": "Usually set near half spin (180°)"
+    },
+
+    "smooth_physics": {
+        "type": "integer",
+        "range": [0, 2000],
+        "description": "Motion threshold for pair change",
+        "display_type": "spinner",
+        "parameter_category": "Smoothswing Configuration",
+        "notes": "Higher = keeps current pair longer. 0 or max disables dynamic pair change"
+    },
+
+    "smooth_mode": {
+        "type": "integer",
+        "range": [0, 3],
+        "description": "Smoothswing mode",
+        "display_type": "dropdown",
+        "parameter_category": "Smoothswing Configuration",
+        "values": {
+            "0": "Disabled",
+            "1": "Standard smoothswing",
+            "2": "Hybrid font (accent swing)",
+            "3": "CF pitch shifting emulation"
+        },
+        "notes": "Mode 2 allows regular swings/spins above hswing threshold"
+    },
+    "blademusicstyle": {
+    "type": "integer",
+    "range": [0, 6],
+    "description": "Audio visualization style during iSaber mode",
+    "display_type": "dropdown",
+    "parameter_category": "iSaber and Audio Player",
+    "values": {
+        "0": "No sound interaction (normal blade)",
+        "1": "Audio-based FoC color blending",
+        "2": "Bi-color bargraph with FoC overlay",
+        "3": "Blade color bargraph",
+        "4": "FoC to blade color gradient bargraph",
+        "5": "Vintage bargraph (red-orange-yellow-green)",
+        "6": "Rainbow bargraph"
+    }
+    },
+     
+    "style_pon": {
+            "type": "integer",
+            "range": [0, 13],
+            "description": "Power-on effect style",
+            "display_type": "dropdown",
+            "parameter_category": "Additional Fx Style Parameters",
+            "values": {
+                "0": "Normal/regular power-on with scrolling",
+                "1": "Lightstick style",
+                "2": "Simple flare style",
+                "3": "Base flare style",
+                "4": "Tip flare style",
+                "5": "Full flare style",
+                "6": "Crumble style",
+                "7": "Quicksilver style",
+                "8": "Mercury style",
+                "9": "Catchup style",
+                "10": "GraFx sequence",
+                "11": "Inverted ignition",
+                "12": "Split-in",
+                "13": "Split-out"
+            }
+    },
+    
+    "style_lockup": {
+        "type": "integer",
+        "range": [1, 7],
+        "description": "Lockup effect style",
+        "display_type": "dropdown",
+        "parameter_category": "Additional Fx Style Parameters",
+        "values": {
+            "1": "Legacy lockup all over blade",
+            "2": "Localized legacy lockup",
+            "3": "Noise localized lockup",
+            "4": "Alternate noise variant",
+            "5": "Flare lockup",
+            "6": "Unicorn rainbow lockup",
+            "7": "GraFx lockup sequence"
+        }
+    },
+    
+    "style_clash": {
+        "type": "integer",
+        "range": [1, 7],
+        "description": "Flash on Clash (FoC) effect style",
+        "display_type": "dropdown",
+        "parameter_category": "Additional Fx Style Parameters",
+        "values": {
+            "1": "Legacy clash all over blade",
+            "2": "Full blade fade",
+            "3": "Random local fade",
+            "4": "Fixed local fade",
+            "5": "Base flare",
+            "6": "Unicorn clash",
+            "7": "Absorb effect"
+        }
+    },
+    
+    "style_drag": {
+        "type": "integer",
+        "range": [1, 5],
+        "description": "Drag tip effect style",
+        "display_type": "dropdown",
+        "parameter_category": "Additional Fx Style Parameters",
+        "values": {
+            "1": "Simple/uniform noise",
+            "2": "Sparking with distributed sparks",
+            "3": "Gradient colored tip",
+            "4": "Gradient with heat map",
+            "5": "Flare drag with subtle noise"
+        }
+    },
+    
+    "style_flicker": {
+        "type": "integer",
+        "range": [0, 5],
+        "description": "Blade flicker effect style",
+        "display_type": "dropdown",
+        "parameter_category": "Additional Fx Style Parameters",
+        "values": {
+            "0": "Legacy flicker - homogeneous random",
+            "1": "Bicolor flicker with random mix",
+            "2": "Movie flicker with color bands",
+            "3": "Brownian noise",
+            "4": "Random noise variant",
+            "5": "Fire flicker"
+        }
+    },
+    
+    "focl": {
+        "type": "integer",
+        "range": [0, 1],
+        "description": "FoC Color Lock",
+        "display_type": "toggle",
+        "parameter_category": "Blade Fx",
+        "values": {
+            "0": "Disabled - uses FoC color",
+            "1": "Enabled - locks to blade color"
+        }
+    },
+    
+    "unstable": {
+        "type": "integer",
+        "range": [0, 18],
+        "description": "Blade effect type",
+        "display_type": "dropdown",
+        "parameter_category": "Ledstrip Fx",
+        "values": {
+            "0": "None - inherits from regular blade",
+            "1": "Unstable blade",
+            "2": "Flame (legacy fire)",
+            "3": "Rain Sizzle",
+            "4": "Chainsaw",
+            "5": "Starkiller",
+            "6": "Unstable TFU",
+            "7": "Gradient",
+            "8": "Wave",
+            "9": "Rainbow",
+            "10": "Theater chase",
+            "11": "Sauron",
+            "12": "Sauron II",
+            "13": "Jedi Fallen Order",
+            "14": "Knight Rider / Energy Beam",
+            "15": "Generative Unstable Fire",
+            "16": "Bicolor Pulse Fx",
+            "17": "GraFx powered blade",
+            "18": "Vision fx (GraFx powered PoV)"
+        }
+    },
+    
+    "mapping_unstable": {
+        "type": "integer",
+        "range": [0, 2],
+        "description": "Unstable effect motion response",
+        "display_type": "dropdown",
+        "parameter_category": "Additional Fx Style Parameters",
+        "values": {
+            "0": "Disabled",
+            "1": "Swing speed",
+            "2": "Gyro/orientation"
+        }
+    },
+    
     "mapping_lockup": {
-      "type": "integer",
-      "range": [0, 2],
-      "description": "Lockup effect motion response",
-      "display_type": "dropdown",
-      "values": {
-        "0": "Fixed position",
-        "1": "Blade angle",
-        "2": "Roll angle"
-      }
+        "type": "integer",
+        "range": [0, 2],
+        "description": "Lockup effect motion response",
+        "display_type": "dropdown",
+        "parameter_category": "Additional Fx Style Parameters",
+        "values": {
+            "0": "Fixed position",
+            "1": "Blade angle",
+            "2": "Roll angle"
+        }
     },
+    
     "mapping_drag": {
-      "type": "integer",
-      "range": [0, 1],
-      "description": "Drag effect response",
-      "display_type": "dropdown",
-      "values": {
-        "0": "Fixed effect",
-        "1": "Motion reactive"
-      }
+        "type": "integer",
+        "range": [0, 1],
+        "description": "Drag effect response",
+        "display_type": "dropdown",
+        "parameter_category": "Additional Fx Style Parameters",
+        "values": {
+            "0": "Fixed effect",
+            "1": "Motion reactive"
+        }
     },
-    "mapping_move": {
-      "type": "range_pair",
-      "range": [0, 1023],
-      "description": "Motion detection range",
-      "display_type": "range_pair",
-      "format": "min,max"
-    },
-    "mapping_audio": {
-      "type": "range_pair",
-      "range": [0, 65535],
-      "description": "Audio responsiveness range",
-      "display_type": "range_pair",
-      "format": "min,max"
-    },
-    "style_grafx1": {
-      "type": "integer",
-      "range": [-1, 31],
-      "description": "First GraFx sequence profile",
-      "display_type": "dropdown"
-    },
-    "style_grafx2": {
-      "type": "integer",
-      "range": [-1, 31],
-      "description": "Second GraFx sequence profile",
-      "display_type": "dropdown"
-    },
-    "style_grafx3": {
-      "type": "integer",
-      "range": [-1, 31],
-      "description": "Third GraFx sequence profile",
-      "display_type": "dropdown"
-    },
+    
     "twon": {
-    "type": "range_pair",
-    "range": [-1800, 1800],
-    "description": "Twist-on behavior range",
-    "display_type": "triple_range",
-    "format": "angle,min,max"
-},
-"pname": {
-    "type": "text",
-    "description": "Profile name",
-    "display_type": "text_input"
-}
-  }
+        "type": "range_pair",
+        "range": [-1800, 1800],
+        "description": "Twist-on behavior range",
+        "display_type": "triple_range",
+        "parameter_category": "Blade Profile",
+        "format": "angle,min,max"
+    },
+    
+    "pname": {
+        "type": "text",
+        "description": "Profile name",
+        "display_type": "text_input",
+        "parameter_category": "Blade Profile"
+    }
 }
