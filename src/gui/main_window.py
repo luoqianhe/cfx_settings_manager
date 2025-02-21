@@ -101,19 +101,13 @@ class MainWindow(QtWidgets.QMainWindow):
        # Container for settings grids
        settings_container = QtWidgets.QWidget()
        settings_layout = QtWidgets.QVBoxLayout(settings_container)
-       
        # Create two settings grids
        self.font_settings_grid = SettingsGrid(
-           "Font Configuration Settings", 
+           "",  # Empty string instead of "Font Configuration Settings"
            self
-       )
-       self.blade_settings_grid = SettingsGrid(
-           "Blade Profile Settings",
-           self
-       )
+           )
        
        settings_layout.addWidget(self.font_settings_grid)
-       settings_layout.addWidget(self.blade_settings_grid)
        
        # Add everything to right side
        right_layout.addWidget(headers_widget)  # Headers stay at top
@@ -320,7 +314,6 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             # Update both grids
             self.font_settings_grid.update_settings(settings)
-            self.blade_settings_grid.update_settings(settings, shared_with)
                         
         except Exception as e:
             print(f"Error displaying settings: {e}")

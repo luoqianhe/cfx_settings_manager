@@ -135,7 +135,7 @@
         "1": "Debug enabled"
     },
     "notes": "Should be enabled only when troubleshooting the board as the verbose log will slow down boot time. Turn off when configuring with RICE to avoid verbose echo"
-},
+    },
 
     "logport": {
         "type": "integer",
