@@ -112,14 +112,4 @@ Because of that the parameter information is stored separately in the parameters
 The display_type field determines which function in widget_factory is called to display the parameter in the gui. Examples of this can be seen in the test_dialog_with_real_values.py file (we're using this to test the widget_factory functions).
 
 The value formats vary per parameter - some are ints, text, dropdowns, toggles, etc.
-There are no parameter dependencies (that I know of).
-
-TO DO:
-- clean up 'value' column (remove descriptions)
-- change colors for parameter dropdowns, etc.
-- add save buttons
-- add warning message for blade profile settings
-- separate font_config and config parameters, alphabetize
-- add parameter search/dropdown at top, make top stay when scrolling
-- add colors
-- add 'donate' button
+There are no parameter dependencies (that I know of)

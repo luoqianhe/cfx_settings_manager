@@ -22,106 +22,127 @@ from PySide6.QtCore import Qt
 from gui.widgets.settings_grid import SettingsGrid
 
 class MainWindow(QtWidgets.QMainWindow):
+    # src/gui/main_window.py
+
     def __init__(self):
-       super().__init__()
-       self.folder_path = None
-       self.file_handler = None
-       self.color_profiles = {}  # Will store loaded color profiles
-       self.grafx_profiles = {}  # Will store loaded grafx profiles
-       self.setWindowTitle("CFX Settings Manager")
-       self.setMinimumSize(1024, 768)
-       
-       # Create central widget and main layout
-       central = QtWidgets.QWidget()
-       self.setCentralWidget(central)
-       layout = QtWidgets.QHBoxLayout(central)
-       
-       # Left sidebar container
-       left_container = QtWidgets.QWidget()
-       left_layout = QtWidgets.QVBoxLayout(left_container)
-       left_layout.setContentsMargins(8, 8, 8, 8)
-       
-       # Add header for soundfont list
-       header_label = QtWidgets.QLabel("Soundfont Folders")
-       header_label.setStyleSheet("""
+        super().__init__()
+        self.folder_path = None
+        self.file_handler = None
+        self.color_profiles = {}
+        self.grafx_profiles = {}
+        self.setWindowTitle("CFX Settings Manager")
+        self.setMinimumSize(1024, 768)
+        
+        # Create central widget and main layout
+        central = QtWidgets.QWidget()
+        self.setCentralWidget(central)
+        layout = QtWidgets.QHBoxLayout(central)
+        
+        # Left sidebar container with its header
+        left_container = QtWidgets.QWidget()
+        left_layout = QtWidgets.QVBoxLayout(left_container)
+        left_layout.setContentsMargins(8, 8, 8, 8)
+        
+        # Soundfont header
+        header_label = QtWidgets.QLabel("Soundfont Folders")
+        header_label.setStyleSheet("""
             font-weight: bold;
             font-size: 14px;
             padding: 4px;
             background-color: #f0f0f0;
             border: 1px solid #ddd;
         """)
-       header_label.setMinimumHeight(30)
-       header_label.setAlignment(Qt.AlignCenter)
-       left_layout.addWidget(header_label)
-       
-       # Font list
-       self.font_list = QtWidgets.QListWidget()
-       self.font_list.itemClicked.connect(self.on_font_selected)
-       left_layout.addWidget(self.font_list)
-       
-       layout.addWidget(left_container, stretch=1)
-       
-       # Right side container
-       right_container = QtWidgets.QWidget()
-       right_layout = QtWidgets.QVBoxLayout(right_container)
-       right_layout.setContentsMargins(8, 8, 8, 8)
-       
-       # Parameter Headers
-       headers_widget = QtWidgets.QWidget()
-       headers_layout = QtWidgets.QHBoxLayout(headers_widget)
-       headers_layout.setContentsMargins(8, 0, 0, 0)  # Set left margin to 8
-       
-       param_header = QtWidgets.QLabel("Parameter")
-       value_header = QtWidgets.QLabel("Value")
-       # Update the header style to remove padding
-       header_style = """
-       font-weight: bold;
-       font-size: 14px;
-       background-color: #f0f0f0;
-       border: 1px solid #ddd;
-       """
-       # Add padding directly to the labels
-       param_header.setContentsMargins(8, 4, 4, 4)  # Left padding of 8
-       value_header.setContentsMargins(8, 4, 4, 4)  # Left padding of 8
-       param_header.setStyleSheet(header_style)
-       value_header.setStyleSheet(header_style)
-       param_header.setMinimumHeight(30)
-       param_header.setFixedWidth(150)
-       value_header.setMinimumHeight(30)
-       value_header.setFixedWidth(400)
-       
-       headers_layout.addWidget(param_header)
-       headers_layout.addWidget(value_header)
-       
-       # Scroll area for settings grids
-       scroll_area = QtWidgets.QScrollArea()
-       scroll_area.setWidgetResizable(True)
-       scroll_area.setFrameShape(QtWidgets.QFrame.NoFrame)
-       
-       # Container for settings grids
-       settings_container = QtWidgets.QWidget()
-       settings_layout = QtWidgets.QVBoxLayout(settings_container)
-       # Create two settings grids
-       self.font_settings_grid = SettingsGrid(
-           "",  # Empty string instead of "Font Configuration Settings"
-           self
-           )
-       
-       settings_layout.addWidget(self.font_settings_grid)
-       
-       # Add everything to right side
-       right_layout.addWidget(headers_widget)  # Headers stay at top
-       scroll_area.setWidget(settings_container)
-       right_layout.addWidget(scroll_area)  # Scrollable content below
-       
-       # Save button at bottom
-       save_button = QtWidgets.QPushButton("Save Changes")
-       save_button.clicked.connect(self.save_changes)
-       right_layout.addWidget(save_button)
-       
-       layout.addWidget(right_container, stretch=3)
-       
-       self.prompt_for_folder()
+        header_label.setMinimumHeight(30)
+        header_label.setAlignment(Qt.AlignCenter)
+        left_layout.addWidget(header_label)
+        
+        # Font list
+        self.font_list = QtWidgets.QListWidget()
+        self.font_list.itemClicked.connect(self.on_font_selected)
+        left_layout.addWidget(self.font_list)
+        
+        layout.addWidget(left_container, stretch=1)
+        
+        # Right side container
+        right_container = QtWidgets.QWidget()
+        right_layout = QtWidgets.QVBoxLayout(right_container)
+        right_layout.setContentsMargins(8, 8, 8, 8)
+
+        # Parameter Headers
+        headers_widget = QtWidgets.QWidget()
+        headers_layout = QtWidgets.QVBoxLayout(headers_widget)  # Vertical layout
+        headers_layout.setContentsMargins(0, 0, 0, 0)
+        headers_layout.setSpacing(8)  # Space between headers and dropdown
+
+        # Create top row for Parameter/Value headers
+        header_row = QtWidgets.QWidget()
+        header_row_layout = QtWidgets.QHBoxLayout(header_row)
+        header_row_layout.setContentsMargins(0, 0, 0, 0)
+
+        param_header = QtWidgets.QLabel("Parameter")
+        value_header = QtWidgets.QLabel("Value")
+        
+        # Use same header style as Soundfont Folders
+        header_style = """
+            font-weight: bold;
+            font-size: 14px;
+            padding: 4px;
+            background-color: #f0f0f0;
+            border: 1px solid #ddd;
+        """
+        param_header.setStyleSheet(header_style)
+        value_header.setStyleSheet(header_style)
+        param_header.setMinimumHeight(30)
+        param_header.setFixedWidth(150)
+        value_header.setMinimumHeight(30)
+        value_header.setFixedWidth(400)
+
+        # Add headers to top row
+        header_row_layout.addWidget(param_header)
+        header_row_layout.addWidget(value_header)
+
+        # Create category dropdown with increased width
+        self.category_dropdown = QtWidgets.QComboBox()
+        self.category_dropdown.setFixedWidth(300)
+        self.category_dropdown.addItem("Jump to section...")
+        self.category_dropdown.currentTextChanged.connect(self.scroll_to_category)
+
+        # Add components to main headers layout
+        headers_layout.addWidget(header_row)
+        headers_layout.addWidget(self.category_dropdown)
+
+        # Scroll area for settings grid
+        scroll_area = QtWidgets.QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QtWidgets.QFrame.NoFrame)
+        
+        # Container for settings grid
+        settings_container = QtWidgets.QWidget()
+        settings_layout = QtWidgets.QVBoxLayout(settings_container)
+        
+        # Create single settings grid
+        self.settings_grid = SettingsGrid(
+            "",  # Empty title
+            self
+        )
+        settings_layout.addWidget(self.settings_grid)
+        
+        # Add everything to right side
+        right_layout.addWidget(headers_widget)  # Headers stay at top
+        scroll_area.setWidget(settings_container)
+        right_layout.addWidget(scroll_area)
+        
+        layout.addWidget(right_container, stretch=3)
+        
+        self.prompt_for_folder()
+    
+    def scroll_to_category(self, category: str):
+        """Scroll to the selected category"""
+        if category == "Jump to section...":
+            return
+            
+        # Ask the settings grid to scroll to the category
+        self.settings_grid.scroll_to_category(category)
 
     def prompt_for_folder(self):
        folder = QtWidgets.QFileDialog.getExistingDirectory(
@@ -313,7 +334,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """Update displayed settings."""
         try:
             # Update both grids
-            self.font_settings_grid.update_settings(settings)
+            self.settings_grid.update_settings(settings)
                         
         except Exception as e:
             print(f"Error displaying settings: {e}")
