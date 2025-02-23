@@ -22,8 +22,6 @@ from PySide6.QtCore import Qt
 from gui.widgets.settings_grid import SettingsGrid
 
 class MainWindow(QtWidgets.QMainWindow):
-    # src/gui/main_window.py
-
     def __init__(self):
         super().__init__()
         self.folder_path = None
@@ -32,16 +30,34 @@ class MainWindow(QtWidgets.QMainWindow):
         self.grafx_profiles = {}
         self.setWindowTitle("CFX Settings Manager")
         self.setMinimumSize(1024, 768)
+        self.resize(1175, 900)
         
         # Create central widget and main layout
         central = QtWidgets.QWidget()
         self.setCentralWidget(central)
         layout = QtWidgets.QHBoxLayout(central)
         
-        # Left sidebar container with its header
+        # Left sidebar container
         left_container = QtWidgets.QWidget()
         left_layout = QtWidgets.QVBoxLayout(left_container)
         left_layout.setContentsMargins(8, 8, 8, 8)
+        
+        # Add Select Font Folder button
+        select_folder_button = QtWidgets.QPushButton("Select Root CFX Folder")
+        select_folder_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4A90E2;
+                color: white;
+                padding: 6px;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #357ABD;
+            }
+        """)
+        select_folder_button.clicked.connect(self.prompt_for_folder)
+        left_layout.addWidget(select_folder_button)
         
         # Soundfont header
         header_label = QtWidgets.QLabel("Soundfont Folders")
@@ -54,10 +70,12 @@ class MainWindow(QtWidgets.QMainWindow):
         """)
         header_label.setMinimumHeight(30)
         header_label.setAlignment(Qt.AlignCenter)
+        header_label.setFixedWidth(250)  # Increased width
         left_layout.addWidget(header_label)
         
         # Font list
         self.font_list = QtWidgets.QListWidget()
+        self.font_list.setFixedWidth(250)  # Match header width
         self.font_list.itemClicked.connect(self.on_font_selected)
         left_layout.addWidget(self.font_list)
         
@@ -68,21 +86,38 @@ class MainWindow(QtWidgets.QMainWindow):
         right_layout = QtWidgets.QVBoxLayout(right_container)
         right_layout.setContentsMargins(8, 8, 8, 8)
 
-        # Parameter Headers
-        headers_widget = QtWidgets.QWidget()
-        headers_layout = QtWidgets.QVBoxLayout(headers_widget)  # Vertical layout
-        headers_layout.setContentsMargins(0, 0, 0, 0)
-        headers_layout.setSpacing(8)  # Space between headers and dropdown
+        # Create fixed top section for dropdown and headers
+        top_section = QtWidgets.QWidget()
+        top_layout = QtWidgets.QVBoxLayout(top_section)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(8)
 
-        # Create top row for Parameter/Value headers
+        # Dropdown row
+        dropdown_row = QtWidgets.QWidget()
+        dropdown_layout = QtWidgets.QHBoxLayout(dropdown_row)
+        dropdown_layout.setContentsMargins(0, 0, 0, 0)
+
+        dropdown_label = QtWidgets.QLabel("Jump to Section:")
+        self.category_dropdown = QtWidgets.QComboBox()
+        self.category_dropdown.setFixedWidth(300)
+        self.category_dropdown.currentTextChanged.connect(self.scroll_to_category)
+
+        dropdown_layout.addWidget(dropdown_label)
+        dropdown_layout.addWidget(self.category_dropdown)
+        dropdown_layout.addStretch()
+
+        # Header row with expandable columns
         header_row = QtWidgets.QWidget()
-        header_row_layout = QtWidgets.QHBoxLayout(header_row)
-        header_row_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout = QtWidgets.QHBoxLayout(header_row)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(0)
 
+        # Create headers
         param_header = QtWidgets.QLabel("Parameter")
         value_header = QtWidgets.QLabel("Value")
-        
-        # Use same header style as Soundfont Folders
+        notes_header = QtWidgets.QLabel("Notes")
+
+        # Style for headers
         header_style = """
             font-weight: bold;
             font-size: 14px;
@@ -90,56 +125,53 @@ class MainWindow(QtWidgets.QMainWindow):
             background-color: #f0f0f0;
             border: 1px solid #ddd;
         """
-        param_header.setStyleSheet(header_style)
-        value_header.setStyleSheet(header_style)
-        param_header.setMinimumHeight(30)
-        param_header.setFixedWidth(150)
-        value_header.setMinimumHeight(30)
-        value_header.setFixedWidth(400)
 
-        # Add headers to top row
-        header_row_layout.addWidget(param_header)
-        header_row_layout.addWidget(value_header)
+        for header in [param_header, value_header, notes_header]:
+            header.setStyleSheet(header_style)
+            header.setMinimumHeight(30)
+            header.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
 
-        # Create category dropdown with increased width
-        self.category_dropdown = QtWidgets.QComboBox()
-        self.category_dropdown.setFixedWidth(300)
-        self.category_dropdown.addItem("Jump to section...")
-        self.category_dropdown.currentTextChanged.connect(self.scroll_to_category)
+        # Set initial minimum widths
+        param_header.setMinimumWidth(200)
+        value_header.setMinimumWidth(250)
+        notes_header.setMinimumWidth(300)
 
-        # Add components to main headers layout
-        headers_layout.addWidget(header_row)
-        headers_layout.addWidget(self.category_dropdown)
+        # Add headers to layout with stretch factors
+        header_layout.addWidget(param_header, 1)
+        header_layout.addWidget(value_header, 2)
+        header_layout.addWidget(notes_header, 2)
 
-        # Scroll area for settings grid
+        # Add dropdown and headers to top section
+        top_layout.addWidget(dropdown_row)
+        top_layout.addWidget(header_row)
+
+        # Scroll area for content
         scroll_area = QtWidgets.QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QtWidgets.QFrame.NoFrame)
-        
+
         # Container for settings grid
         settings_container = QtWidgets.QWidget()
         settings_layout = QtWidgets.QVBoxLayout(settings_container)
-        
-        # Create single settings grid
+        settings_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Create settings grid with matching column proportions
         self.settings_grid = SettingsGrid(
-            "",  # Empty title
-            self
+            "",
+            self,
+            column_stretches=[1, 2, 2]  # Pass stretch factors to grid
         )
         settings_layout.addWidget(self.settings_grid)
-        
+
         # Add everything to right side
-        right_layout.addWidget(headers_widget)  # Headers stay at top
+        right_layout.addWidget(top_section)  # Fixed top section
         scroll_area.setWidget(settings_container)
         right_layout.addWidget(scroll_area)
-        
+
         layout.addWidget(right_container, stretch=3)
-        
-        self.prompt_for_folder()
-    
+   
     def scroll_to_category(self, category: str):
         """Scroll to the selected category"""
-        if category == "Jump to section...":
-            return
             
         # Ask the settings grid to scroll to the category
         self.settings_grid.scroll_to_category(category)
