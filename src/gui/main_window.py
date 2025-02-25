@@ -1,5 +1,5 @@
 # src/gui/main_window.py
-from PySide6 import QtWidgets, QtCore
+from PySide6 import QtWidgets, QtCore, QtGui
 from pathlib import Path
 from core.validators import CFXValidator
 from core.file_handler import CFXFileHandler
@@ -183,13 +183,106 @@ class MainWindow(QtWidgets.QMainWindow):
        )
        if folder:
            self.load_cfx_folder(folder)
-    
+
     def on_font_selected(self, item):
-       font_path = item.data(QtCore.Qt.UserRole)
-       config_path = Path(font_path) / "font_config.txt"
-       if config_path.exists():
-           settings = self.load_font_settings(config_path)
-           self.display_settings(settings)
+        try:
+            font_path = Path(item.data(QtCore.Qt.UserRole))
+            font_num = int(font_path.name.split('-')[0])
+            font_name = '-'.join(font_path.name.split('-')[1:])
+            
+            print(f"\nSelected font: {font_name} (Font #{font_num})")
+            
+            # Load font configuration
+            settings = self.file_handler.load_font_config(font_path)
+            if not settings:
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Error",
+                    f"No font_config.txt found in {font_path}"
+                )
+                return
+            
+            print(f"Font config parameters: {len(settings)}")
+            
+            # Load preferences
+            prefs = self.file_handler.load_preferences()
+            font_prefs = prefs.get(font_num, {})
+            
+            # Determine which blade profile to use
+            profile_num = settings.get('start_blade')
+            if profile_num == '-1' and 'profile' in font_prefs:
+                profile_num = font_prefs['profile']
+            
+            print(f"Using blade profile: {profile_num}")
+            
+            # Clear all highlighting first
+            for i in range(self.font_list.count()):
+                list_item = self.font_list.item(i)
+                list_item.setBackground(QtGui.QColor(255, 255, 255))  # White
+            
+            # Only highlight shared fonts if we have a valid, non-negative profile number
+            shared_fonts = []
+            if profile_num and profile_num != '-1':
+                # IMPORTANT FIX: Convert profile_num to int before passing to get_shared_profiles
+                profile_num_int = int(profile_num)
+                shared_fonts = self.file_handler.get_shared_profiles(profile_num_int)
+                
+                # Highlight shared fonts in the list - but NOT the current font
+                current_font_path = Path(item.data(QtCore.Qt.UserRole))
+                current_font_name = '-'.join(current_font_path.name.split('-')[1:])
+                
+                for i in range(self.font_list.count()):
+                    list_item = self.font_list.item(i)
+                    item_font_path = Path(list_item.data(QtCore.Qt.UserRole))
+                    item_font_name = '-'.join(item_font_path.name.split('-')[1:])
+                    
+                    # Compare item_font_name with shared_fonts list but exclude current font
+                    if item_font_name in shared_fonts and item_font_name != current_font_name:
+                        list_item.setBackground(QtGui.QColor(255, 220, 220))  # Light red
+            
+            # Load blade profile if we have a valid profile number
+            blade_settings = {}
+            if profile_num and profile_num != '-1':
+                print(f"Loading blade profile {profile_num}")
+                blade_profile = self.file_handler.load_blade_profile(int(profile_num))
+                if blade_profile:
+                    print(f"Blade profile parameters: {len(blade_profile)}")
+                    blade_settings = blade_profile
+                    shared_with = shared_fonts
+                else:
+                    print(f"Failed to load blade profile {profile_num}")
+            
+            # Determine which color profile to use
+            color_num = settings.get('start_color')
+            if color_num == '-1' and 'color' in font_prefs:
+                color_num = font_prefs['color']
+                settings['start_color'] = color_num
+
+            # Load color profile if we have a valid color number
+            if color_num and color_num != '-1':
+                print(f"Loading color profile {color_num}")
+                color_profile = self.file_handler.load_color_profile(int(color_num))
+                if color_profile:
+                    print(f"Color profile parameters: {len(color_profile)}")
+                    blade_settings.update(color_profile)
+                else:
+                    print(f"Failed to load color profile {color_num}")
+            
+            # Combine all settings
+            all_settings = settings.copy()
+            all_settings.update(blade_settings)
+            print(f"Total combined parameters: {len(all_settings)}")
+            
+            # Update settings grid
+            self.settings_grid.update_settings(all_settings)
+                        
+        except Exception as e:
+            print(f"Error loading settings: {e}")
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to load settings: {str(e)}"
+            )    
 
     def load_cfx_folder(self, folder_path):
         try:
@@ -301,6 +394,9 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             font_path = Path(item.data(QtCore.Qt.UserRole))
             font_num = int(font_path.name.split('-')[0])
+            font_name = '-'.join(font_path.name.split('-')[1:])
+            
+            print(f"\nSelected font: {font_name} (Font #{font_num})")
             
             # Load font configuration
             settings = self.file_handler.load_font_config(font_path)
@@ -312,6 +408,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 )
                 return
             
+            print(f"Font config parameters: {len(settings)}")
+            
             # Load preferences
             prefs = self.file_handler.load_preferences()
             font_prefs = prefs.get(font_num, {})
@@ -320,39 +418,67 @@ class MainWindow(QtWidgets.QMainWindow):
             profile_num = settings.get('start_blade')
             if profile_num == '-1' and 'profile' in font_prefs:
                 profile_num = font_prefs['profile']
-                print(f"DEBUG: Using profile {profile_num} from prefs.txt")
+            
+            print(f"Using blade profile: {profile_num}")
+            
+            # Clear all highlighting first
+            for i in range(self.font_list.count()):
+                list_item = self.font_list.item(i)
+                list_item.setBackground(QtGui.QColor(255, 255, 255))  # White
+            
+            # Only highlight shared fonts if we have a valid, non-negative profile number
+            if profile_num and profile_num != '-1':
+                # Get list of fonts sharing this profile
+                shared_fonts = self.file_handler.get_shared_profiles(int(profile_num))
+                
+                # Highlight shared fonts in the list
+                for i in range(self.font_list.count()):
+                    list_item = self.font_list.item(i)
+                    item_font_path = Path(list_item.data(QtCore.Qt.UserRole))
+                    item_font_name = '-'.join(item_font_path.name.split('-')[1:])
+                    
+                    # Only highlight if it's a different font that shares the same profile
+                    if item_font_name in shared_fonts and item_font_name != font_name:
+                        list_item.setBackground(QtGui.QColor(255, 220, 220))  # Light red
+            
+            # Load blade profile if we have a valid profile number
+            blade_settings = {}
+            shared_with = []
+            if profile_num and profile_num != '-1':
+                print(f"Loading blade profile {profile_num}")
+                blade_profile = self.file_handler.load_blade_profile(int(profile_num))
+                if blade_profile:
+                    print(f"Blade profile parameters: {len(blade_profile)}")
+                    for key, value in blade_profile.items():
+                        print(f"  {key}: {value}")
+                    blade_settings = blade_profile
+                    shared_with = self.file_handler.get_shared_profiles(int(profile_num))
+                else:
+                    print(f"Failed to load blade profile {profile_num}")
             
             # Determine which color profile to use
             color_num = settings.get('start_color')
-            print(f"\nDEBUG: Initial color_num from settings: {color_num}")
             if color_num == '-1' and 'color' in font_prefs:
                 color_num = font_prefs['color']
-                print(f"DEBUG: Using color {color_num} from prefs.txt")
                 settings['start_color'] = color_num
 
-            # Load blade profile if we have a valid profile number
-            if profile_num and profile_num != '-1':
-                blade_profile = self.file_handler.load_blade_profile(int(profile_num))
-                if blade_profile:
-                    # Get list of other fonts using this profile
-                    shared_with = self.file_handler.get_shared_profiles(int(profile_num))
-                    print(f"DEBUG: Profile {profile_num} is shared with: {shared_with}")
-                    settings.update(blade_profile)
-                else:
-                    print(f"DEBUG: Failed to load blade profile {profile_num}")
-            
             # Load color profile if we have a valid color number
             if color_num and color_num != '-1':
+                print(f"Loading color profile {color_num}")
                 color_profile = self.file_handler.load_color_profile(int(color_num))
                 if color_profile:
-                    print(f"DEBUG: Loaded color profile: {color_profile}")
-                    settings.update(color_profile)
-                    print(f"DEBUG: Settings after update: {settings.get('start_color')}")
+                    print(f"Color profile parameters: {len(color_profile)}")
+                    blade_settings.update(color_profile)
                 else:
-                    print(f"DEBUG: Failed to load color profile {color_num}")
+                    print(f"Failed to load color profile {color_num}")
             
-            if settings:
-                self.display_settings(settings)
+            # Combine all settings
+            all_settings = settings.copy()
+            all_settings.update(blade_settings)
+            print(f"Total combined parameters: {len(all_settings)}")
+            
+            # Update settings grid
+            self.settings_grid.update_settings(all_settings)
                         
         except Exception as e:
             print(f"Error loading settings: {e}")
@@ -361,7 +487,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 "Error",
                 f"Failed to load settings: {str(e)}"
             )
-
+    
     def display_settings(self, settings: dict, shared_with: list = None):
         """Update displayed settings."""
         try:

@@ -86,23 +86,30 @@ class CFXFileHandler:
             config_path = self.root_path / "config.txt"
             
             if not config_path.exists():
+                print("config.txt not found")
                 return None
                 
             current_profile = None
             profile_data = {}
             
+            print(f"Loading profile {profile_num} from {config_path}")
+            
             with open(config_path, 'r') as f:
-                for line in f:
+                for line_num, line in enumerate(f, 1):
                     line = line.strip()
                     if line.startswith('[profile='):
                         try:
                             current_profile = int(line[9:-1])
+                            print(f"Found profile section: {current_profile}")
                         except ValueError:
                             continue
                     elif '=' in line and current_profile == profile_num:
                         key, value = line.split('=', 1)
-                        profile_data[key.strip()] = value.strip()
+                        key = key.strip()
+                        value = value.strip()
+                        profile_data[key] = value
                         
+            print(f"Loaded {len(profile_data)} parameters for profile {profile_num}")
             return profile_data if profile_data else None
             
         except Exception as e:
