@@ -69,12 +69,22 @@ class CFXFileHandler:
                     line = line.strip()
                     if line and not line.startswith('//'):
                         if line.startswith('[font='):
-                            current_font = int(line[6:-1])
-                            prefs[current_font] = {}
+                            try:
+                                # Parse font index - this is 0-based in prefs.txt
+                                # while folder names are 1-based
+                                current_font = int(line[6:-1])
+                                prefs[current_font] = {}
+                            except ValueError:
+                                continue
                         elif '=' in line and current_font is not None:
                             key, value = line.split('=', 1)
                             prefs[current_font][key.strip()] = value.strip()
-                            
+            
+            # Debug info
+            print(f"Loaded preferences for {len(prefs)} fonts:")
+            for font_idx, font_prefs in prefs.items():
+                print(f"  Font {font_idx} (folder {font_idx+1}-*): {font_prefs}")
+                                
         except Exception as e:
             print(f"Error loading preferences: {e}")
             
