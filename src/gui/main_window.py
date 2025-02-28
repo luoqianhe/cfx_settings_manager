@@ -241,12 +241,15 @@ class MainWindow(QtWidgets.QMainWindow):
                 list_item = self.font_list.item(i)
                 list_item.setBackground(QtGui.QColor(255, 255, 255))  # White
             
+            # Track shared fonts and parameters
+            shared_fonts = []
+            shared_parameters = set()
+            
             # Only highlight shared fonts if we have a valid profile
             if effective_profile is not None and effective_profile != '-1':
                 effective_profile_int = int(effective_profile)
                 
                 # Find which fonts share this effective profile
-                shared_fonts = []
                 for other_font_num, other_font_name, other_font_path in self.file_handler.load_font_folders():
                     # Skip the current font
                     if other_font_num == font_num:
@@ -294,6 +297,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 if blade_profile:
                     print(f"Loaded profile {effective_profile} with {len(blade_profile)} parameters")
                     blade_settings = blade_profile
+                    
+                    # If this font shares its profile with other fonts, all blade profile parameters are shared
+                    if shared_fonts:
+                        shared_parameters.update(blade_settings.keys())
+                        print(f"Shared parameters: {len(shared_parameters)}")
                 else:
                     print(f"Failed to load blade profile {effective_profile}")
             
@@ -327,14 +335,8 @@ class MainWindow(QtWidgets.QMainWindow):
             all_settings = settings.copy()
             all_settings.update(blade_settings)
             
-            # Add information about effective profiles for display
-            if profile_num == '-1' and effective_profile is not None:
-                all_settings['_effective_blade_profile'] = f"Using profile {effective_profile} from preferences"
-            if color_num == '-1' and effective_color is not None:
-                all_settings['_effective_color_profile'] = f"Using color {effective_color} from preferences"
-            
-            # Update UI
-            self.settings_grid.update_settings(all_settings)
+            # Update UI with shared parameter information
+            self.settings_grid.update_settings(all_settings, shared_with=shared_fonts, shared_parameters=shared_parameters)
                         
         except Exception as e:
             print(f"Error loading settings: {e}")

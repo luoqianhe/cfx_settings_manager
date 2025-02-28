@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGridLayout, QLabel, 
     QPushButton, QFrame, QScrollArea, QTableWidgetItem, QHeaderView,
-    QLineEdit, QSpinBox, QComboBox
+    QLineEdit, QSpinBox, QComboBox, QHBoxLayout
 )
 from PySide6.QtCore import Signal, Qt, QTimer, QPoint
 from pathlib import Path
@@ -45,7 +45,7 @@ class SettingsGrid(QWidget):
             
         layout.addWidget(content)
    
-    def update_settings(self, settings: dict, shared_with: list = None):
+    def update_settings(self, settings: dict, shared_with: list = None, shared_parameters: set = None):
         """Update displayed settings."""
         # Clear existing settings and category labels
         self.category_labels.clear()
@@ -54,6 +54,9 @@ class SettingsGrid(QWidget):
             if item.widget():
                 item.widget().deleteLater()
 
+        # Initialize shared parameters if not provided
+        shared_parameters = shared_parameters or set()
+        
         # Extract start_blade and start_color separately
         profiles_params = {}
         if 'start_blade' in settings:
@@ -141,6 +144,9 @@ class SettingsGrid(QWidget):
 
                 # Create appropriate widget based on display_type
                 try:
+                    container = None  # Initialize container to None
+                    widget = None     # Initialize widget to None
+                    
                     if display_type == 'text_input':
                         container, widget = create_text_widget(param_name, param_def)
                     elif display_type == 'spinner':
@@ -155,6 +161,9 @@ class SettingsGrid(QWidget):
                         container, widget = create_color_picker_widget(param_name, param_def)
                     elif display_type == 'triple_range':
                         container, widget = create_triple_range_widget(param_name, param_def)
+                    else:
+                        # Fallback for unknown display types
+                        container, widget = create_text_widget(param_name, param_def)
 
                     if container:
                         container.setFixedWidth(300)
@@ -163,6 +172,24 @@ class SettingsGrid(QWidget):
                         # Set value based on widget type
                         if isinstance(widget, QLineEdit):
                             widget.setText(str(value))
+                        elif isinstance(widget, QSpinBox):
+                            try:
+                                # Try to convert to int - this might fail for decimal values
+                                widget.setValue(int(value))
+                            except ValueError:
+                                # If it's a decimal value, try to convert to float and round
+                                try:
+                                    widget.setValue(round(float(value)))
+                                    print(f"Converted decimal value {value} to integer {round(float(value))}")
+                                except ValueError:
+                                    print(f"Could not convert value {value} to number")
+                                    # Just set text if all else fails
+                                    if hasattr(widget, 'setText'):
+                                        widget.setText(str(value))
+                        elif isinstance(widget, QComboBox):
+                            index = widget.findData(str(value))
+                            if index >= 0:
+                                widget.setCurrentIndex(index)
                         elif isinstance(widget, QSpinBox):
                             widget.setValue(int(value))
                         elif isinstance(widget, QComboBox):
@@ -217,6 +244,10 @@ class SettingsGrid(QWidget):
 
         # Process regular categories
         for index, category in enumerate(sorted(categorized_params.keys())):
+            # Check if this category has any shared parameters
+            category_has_shared_params = any(param_name in shared_parameters 
+                                        for param_name, _ in categorized_params[category])
+            
             # Add separator before each category (except the first one after profiles)
             if row > 0 and (profiles_params or index > 0):
                 separator = QFrame()
@@ -227,6 +258,10 @@ class SettingsGrid(QWidget):
                 row += 1
 
             # Category header with enhanced styling
+            header_container = QWidget()
+            header_layout = QHBoxLayout(header_container)
+            header_layout.setContentsMargins(0, 0, 0, 0)
+            
             category_label = QLabel(category)
             category_label.setStyleSheet("""
                 font-weight: bold;
@@ -234,7 +269,20 @@ class SettingsGrid(QWidget):
                 color: #4A90E2;
                 padding: 10px 0px 10px 0px;
             """)
-            self.grid_layout.addWidget(category_label, row, 0, 1, 3)
+            header_layout.addWidget(category_label)
+            
+            # Add warning label if category has shared parameters
+            if category_has_shared_params and shared_with:
+                warning_label = QLabel("Highlighted parameters are used by multiple soundfonts")
+                warning_label.setStyleSheet("""
+                    color: #FF0000;
+                    font-style: italic;
+                    padding-left: 20px;
+                """)
+                header_layout.addWidget(warning_label)
+            
+            header_layout.addStretch()
+            self.grid_layout.addWidget(header_container, row, 0, 1, 3)
             
             # Store reference to the category label
             self.category_labels[category] = category_label
@@ -278,6 +326,10 @@ class SettingsGrid(QWidget):
                     desc_label.setWordWrap(True)
                     name_layout.addWidget(desc_label)
 
+                # Highlight shared parameters
+                if param_name in shared_parameters and shared_with:
+                    name_container.setStyleSheet("background-color: #FFE0E0;")  # Light red background
+
                 category_layout.addWidget(name_container, param_row, 0)
 
                 # Create appropriate widget based on display_type
@@ -299,13 +351,30 @@ class SettingsGrid(QWidget):
 
                     if container:
                         container.setFixedWidth(300)
+                        
+                        # Highlight shared parameters
+                        if param_name in shared_parameters and shared_with:
+                            container.setStyleSheet("background-color: #FFE0E0;")  # Light red background
+                            
                         category_layout.addWidget(container, param_row, 1)
                         
                         # Set value based on widget type
                         if isinstance(widget, QLineEdit):
                             widget.setText(str(value))
                         elif isinstance(widget, QSpinBox):
-                            widget.setValue(int(value))
+                            try:
+                                # Try to convert to int - this might fail for decimal values
+                                widget.setValue(int(value))
+                            except ValueError:
+                                # If it's a decimal value, try to convert to float and round
+                                try:
+                                    widget.setValue(round(float(value)))
+                                    print(f"Converted decimal value {value} to integer {round(float(value))}")
+                                except ValueError:
+                                    print(f"Could not convert value {value} to number")
+                                    # Just set text if all else fails
+                                    if hasattr(widget, 'setText'):
+                                        widget.setText(str(value))
                         elif isinstance(widget, QComboBox):
                             index = widget.findData(str(value))
                             if index >= 0:
@@ -347,7 +416,7 @@ class SettingsGrid(QWidget):
             # Add the category container to the main grid
             self.grid_layout.addWidget(category_container, row, 0, 1, 3)
             row += 1
-        
+     
     def load_parameter_definitions(self):
         """Load parameter definitions from JSON file."""
         try:
