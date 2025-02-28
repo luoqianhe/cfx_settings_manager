@@ -44,9 +44,55 @@ class SettingsGrid(QWidget):
             self.grid_layout.setColumnStretch(col, stretch)
             
         layout.addWidget(content)
-   
+    
+    def color_debug_check(self):
+        """Debug function to check all colors in color_profiles against X11_COLORS and STANDARD_COLORS"""
+        from core.color_utils import X11_COLORS, STANDARD_COLORS, rgbw_to_rgb
+        
+        print("\n===== COLOR DEBUG =====")
+        
+        # Check if standard colors mapping contains color (0,350,1023,0)
+        standard_rgbw = (0, 350, 1023, 0)
+        if standard_rgbw in STANDARD_COLORS:
+            print(f"Color (0,350,1023,0) is a standard color: {STANDARD_COLORS[standard_rgbw]}")
+        else:
+            print(f"Color (0,350,1023,0) is NOT in standard colors. Available standard colors:")
+            for rgbw, name in STANDARD_COLORS.items():
+                print(f"  {rgbw} -> {name}")
+        
+        # Print all color profiles and check against X11 and STANDARD_COLORS
+        if self.main_window and hasattr(self.main_window, 'color_profiles'):
+            print("\nAll color profiles:")
+            for color_num, profile in self.main_window.color_profiles.items():
+                color_name = profile.get('color_name', 'unknown')
+                print(f"Color {color_num}: name='{color_name}'")
+                
+                # Check if color name exists in X11_COLORS
+                if color_name in X11_COLORS:
+                    r, g, b = X11_COLORS[color_name]
+                    print(f"  Found in X11_COLORS: rgb({r},{g},{b})")
+                else:
+                    print(f"  NOT found in X11_COLORS")
+                    
+                    # Check if the color name is in STANDARD_COLORS values
+                    found_in_standard = False
+                    for rgbw, std_name in STANDARD_COLORS.items():
+                        if std_name == color_name:
+                            r, g, b = rgbw_to_rgb(*rgbw)
+                            print(f"  Found in STANDARD_COLORS: rgbw={rgbw} -> rgb({r},{g},{b})")
+                            found_in_standard = True
+                            break
+                    
+                    if not found_in_standard:
+                        print(f"  NOT found in STANDARD_COLORS either")
+        
+        print("===== END COLOR DEBUG =====\n")
+    
     def update_settings(self, settings: dict, shared_with: list = None, shared_parameters: set = None):
         """Update displayed settings."""
+        # Debug color lookups
+        self.color_debug_check()
+    
         # Clear existing settings and category labels
         self.category_labels.clear()
         for i in reversed(range(self.grid_layout.count())):
@@ -167,7 +213,6 @@ class SettingsGrid(QWidget):
 
                     if container:
                         container.setFixedWidth(300)
-                        profiles_layout.addWidget(container, param_row, 1)
                         
                         # Set value based on widget type
                         if isinstance(widget, QLineEdit):
@@ -177,21 +222,13 @@ class SettingsGrid(QWidget):
                                 # Try to convert to int - this might fail for decimal values
                                 widget.setValue(int(value))
                             except ValueError:
-                                # If it's a decimal value, try to convert to float and round
+                                # For decimal values, try to convert to float and round
                                 try:
                                     widget.setValue(round(float(value)))
-                                    print(f"Converted decimal value {value} to integer {round(float(value))}")
                                 except ValueError:
-                                    print(f"Could not convert value {value} to number")
                                     # Just set text if all else fails
                                     if hasattr(widget, 'setText'):
                                         widget.setText(str(value))
-                        elif isinstance(widget, QComboBox):
-                            index = widget.findData(str(value))
-                            if index >= 0:
-                                widget.setCurrentIndex(index)
-                        elif isinstance(widget, QSpinBox):
-                            widget.setValue(int(value))
                         elif isinstance(widget, QComboBox):
                             index = widget.findData(str(value))
                             if index >= 0:
@@ -213,13 +250,78 @@ class SettingsGrid(QWidget):
                                 widget[0]['B'][1].setValue(b)
                                 widget[0]['W'][1].setValue(w)
 
-                    # Add notes if available
-                    if 'notes' in param_def:
-                        notes_label = QLabel(param_def['notes'])
-                        notes_label.setStyleSheet("font-style: italic; color: #666666; font-size: 11px;")
-                        notes_label.setWordWrap(True)
-                        notes_label.setFixedWidth(300)
-                        profiles_layout.addWidget(notes_label, param_row, 2)
+                        # Add color preview for start_color parameter
+                        if param_name == 'start_color':
+                            try:
+                                color_value = value.split(" ")[0] if " " in value else value
+                                color_num = int(color_value)
+                                
+                                if color_num >= 0 and color_num <= 31:
+                                    if self.main_window and hasattr(self.main_window, 'color_profiles'):
+                                        color_profile = self.main_window.color_profiles.get(color_num, {})
+                                        
+                                        if 'color_name' in color_profile:
+                                            color_name = color_profile['color_name']
+                                            
+                                            # Import X11_COLORS and STANDARD_COLORS from color_utils
+                                            from core.color_utils import X11_COLORS, STANDARD_COLORS, rgbw_to_rgb
+                                            
+                                            # Try to get RGB values from X11_COLORS
+                                            if color_name in X11_COLORS:
+                                                r, g, b = X11_COLORS[color_name]
+                                            else:
+                                                # If not in X11_COLORS, check if we have RGBW values for this color
+                                                # in the STANDARD_COLORS mapping
+                                                rgbw_values = None
+                                                for rgbw, name in STANDARD_COLORS.items():
+                                                    if name == color_name:
+                                                        rgbw_values = rgbw
+                                                        break
+                                                
+                                                if rgbw_values:
+                                                    # Convert RGBW to RGB
+                                                    r, g, b = rgbw_to_rgb(*rgbw_values)
+                                                else:
+                                                    # Fallback to a light blue color
+                                                    r, g, b = 173, 216, 230  # Light blue
+                                            
+                                            # Create color preview
+                                            color_preview = QFrame()
+                                            color_preview.setFixedSize(20, 20)
+                                            color_preview.setFrameShape(QFrame.Box)
+                                            color_preview.setFrameShadow(QFrame.Plain)
+                                            
+                                            # Set background color
+                                            color_preview.setStyleSheet(f"background-color: rgb({r}, {g}, {b}); border: 1px solid black;")
+                                            
+                                            # Create a sub-layout for the color display
+                                            color_layout = QHBoxLayout()
+                                            color_layout.setContentsMargins(0, 0, 0, 0)
+                                            color_layout.addWidget(container)
+                                            color_layout.addWidget(color_preview)
+                                            color_layout.addStretch()
+                                            
+                                            # Create container for color with preview
+                                            color_container = QWidget()
+                                            color_container.setLayout(color_layout)
+                                            
+                                            # Add to profiles layout
+                                            profiles_layout.addWidget(color_container, param_row, 1)
+                                            # Skip the normal container add
+                                            continue
+                            except Exception as e:
+                                print(f"Error creating color preview: {e}")
+                        
+                        # Normal container add if not start_color or if color preview failed
+                        profiles_layout.addWidget(container, param_row, 1)
+
+                        # Add notes if available
+                        if 'notes' in param_def:
+                            notes_label = QLabel(param_def['notes'])
+                            notes_label.setStyleSheet("font-style: italic; color: #666666; font-size: 11px;")
+                            notes_label.setWordWrap(True)
+                            notes_label.setFixedWidth(300)
+                            profiles_layout.addWidget(notes_label, param_row, 2)
                         
                 except Exception as e:
                     print(f"Error creating widget for {param_name}: {e}")
@@ -334,6 +436,9 @@ class SettingsGrid(QWidget):
 
                 # Create appropriate widget based on display_type
                 try:
+                    container = None  # Initialize container
+                    widget = None     # Initialize widget
+                    
                     if display_type == 'text_input':
                         container, widget = create_text_widget(param_name, param_def)
                     elif display_type == 'spinner':
@@ -348,6 +453,9 @@ class SettingsGrid(QWidget):
                         container, widget = create_color_picker_widget(param_name, param_def)
                     elif display_type == 'triple_range':
                         container, widget = create_triple_range_widget(param_name, param_def)
+                    else:
+                        # Fallback for unknown display types
+                        container, widget = create_text_widget(param_name, param_def)
 
                     if container:
                         container.setFixedWidth(300)
@@ -366,12 +474,10 @@ class SettingsGrid(QWidget):
                                 # Try to convert to int - this might fail for decimal values
                                 widget.setValue(int(value))
                             except ValueError:
-                                # If it's a decimal value, try to convert to float and round
+                                # For decimal values, try to convert to float and round
                                 try:
                                     widget.setValue(round(float(value)))
-                                    print(f"Converted decimal value {value} to integer {round(float(value))}")
                                 except ValueError:
-                                    print(f"Could not convert value {value} to number")
                                     # Just set text if all else fails
                                     if hasattr(widget, 'setText'):
                                         widget.setText(str(value))
@@ -435,10 +541,10 @@ class SettingsGrid(QWidget):
 
     def scroll_to_category(self, category: str):
         """Scroll to make the selected category visible"""
-        print(f"Attempting to scroll to category: {category}")  # Debug
+        # print(f"Attempting to scroll to category: {category}")  # Debug
         if category in self.category_labels:
             label = self.category_labels[category]
-            print(f"Found label for category")  # Debug
+            # print(f"Found label for category")  # Debug
             
             # Find the scroll area by traversing up the parent hierarchy
             current_widget = self
@@ -449,20 +555,20 @@ class SettingsGrid(QWidget):
                     scroll_area = current_widget
                     break
             
-            print(f"Found scroll area: {scroll_area}")  # Debug
+            # print(f"Found scroll area: {scroll_area}")  # Debug
             
             if scroll_area:
                 # Get the vertical scroll bar
                 scrollbar = scroll_area.verticalScrollBar()
-                print(f"Scrollbar range: {scrollbar.minimum()} to {scrollbar.maximum()}")  # Debug
+                # print(f"Scrollbar range: {scrollbar.minimum()} to {scrollbar.maximum()}")  # Debug
                 
                 # Calculate position
                 pos = label.mapToParent(QPoint(0, 0))
-                print(f"Calculated position: {pos.y()}")  # Debug
+                # print(f"Calculated position: {pos.y()}")  # Debug
                 
                 # Set the scroll position
                 scrollbar.setValue(pos.y())
-                print(f"Set scrollbar value to: {pos.y()}")  # Debug
+                # print(f"Set scrollbar value to: {pos.y()}")  # Debug
             
     def filter_settings(self, search_text: str):
         """Filter settings based on search text"""

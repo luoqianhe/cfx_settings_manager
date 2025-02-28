@@ -56,12 +56,12 @@ def create_spinner_widget(param_name, param_def):
 
 def create_dropdown_widget(param_name: str, param_def: dict, main_window=None):
     """Create a dropdown widget from parameter definition."""
-    print(f"\nDEBUG: Creating dropdown for {param_name}")
-    print(f"DEBUG: main_window is {main_window}")
-    if main_window:
-        print(f"DEBUG: Has color_profiles: {hasattr(main_window, 'color_profiles')}")
-        if hasattr(main_window, 'color_profiles'):
-            print(f"DEBUG: Number of color profiles: {len(main_window.color_profiles)}")
+    # print(f"\nDEBUG: Creating dropdown for {param_name}")
+    # print(f"DEBUG: main_window is {main_window}")
+    #if main_window:
+    #    print(f"DEBUG: Has color_profiles: {hasattr(main_window, 'color_profiles')}")
+    #    if hasattr(main_window, 'color_profiles'):
+    #        print(f"DEBUG: Number of color profiles: {len(main_window.color_profiles)}")
     
     container = QtWidgets.QWidget()
     layout = QtWidgets.QVBoxLayout(container)
