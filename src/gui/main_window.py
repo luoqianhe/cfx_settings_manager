@@ -199,6 +199,8 @@ class MainWindow(QtWidgets.QMainWindow):
    
     def scroll_to_category(self, category: str):
         """Scroll to the selected category"""
+        if not category or category == "Jump to section...":
+            return
             
         # Ask the settings grid to scroll to the category
         self.settings_grid.scroll_to_category(category)

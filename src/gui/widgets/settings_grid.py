@@ -134,8 +134,18 @@ class SettingsGrid(QWidget):
 
         # Update dropdown with categories (alphabetically sorted)
         if self.main_window and hasattr(self.main_window, 'category_dropdown'):
+            self.main_window.category_dropdown.blockSignals(True)  # Block signals temporarily
             self.main_window.category_dropdown.clear()
-            self.main_window.category_dropdown.addItems(sorted(categories))
+            
+            # First add a placeholder item if needed
+            if len(categories) > 1:  # Only add if we have multiple categories
+                self.main_window.category_dropdown.addItem("Jump to section...")
+                
+            # Add all categories alphabetically
+            for category in sorted(categories):
+                self.main_window.category_dropdown.addItem(category)
+                
+            self.main_window.category_dropdown.blockSignals(False)  # Unblock signals
 
         row = 0
 
@@ -253,10 +263,6 @@ class SettingsGrid(QWidget):
                                     # Just set text if all else fails
                                     if hasattr(widget, 'setText'):
                                         widget.setText(str(value))
-                        elif isinstance(widget, QComboBox):
-                            index = widget.findData(str(value))
-                            if index >= 0:
-                                widget.setCurrentIndex(index)
                         elif isinstance(widget, tuple):
                             if display_type == 'range_pair':
                                 min_val, max_val = map(int, value.split(','))
@@ -565,12 +571,9 @@ class SettingsGrid(QWidget):
 
     def scroll_to_category(self, category: str):
         """Scroll to make the selected category visible"""
-        # print(f"Attempting to scroll to category: {category}")  # Debug
         if category in self.category_labels:
             label = self.category_labels[category]
-            # print(f"Found label for category")  # Debug
-            
-            # Find the scroll area by traversing up the parent hierarchy
+            # Find the scroll area
             current_widget = self
             scroll_area = None
             while current_widget:
@@ -579,21 +582,16 @@ class SettingsGrid(QWidget):
                     scroll_area = current_widget
                     break
             
-            # print(f"Found scroll area: {scroll_area}")  # Debug
-            
             if scroll_area:
                 # Get the vertical scroll bar
                 scrollbar = scroll_area.verticalScrollBar()
-                # print(f"Scrollbar range: {scrollbar.minimum()} to {scrollbar.maximum()}")  # Debug
                 
                 # Calculate position
-                pos = label.mapToParent(QPoint(0, 0))
-                # print(f"Calculated position: {pos.y()}")  # Debug
+                pos = label.mapTo(scroll_area.widget(), QPoint(0, 0))
                 
                 # Set the scroll position
-                scrollbar.setValue(pos.y())
-                # print(f"Set scrollbar value to: {pos.y()}")  # Debug
-            
+                scrollbar.setValue(pos.y())  
+   
     def filter_settings(self, search_text: str):
         """Filter settings based on search text"""
         if not hasattr(self, 'original_settings'):
