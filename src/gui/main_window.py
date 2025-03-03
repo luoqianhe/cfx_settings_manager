@@ -32,6 +32,33 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setMinimumSize(1024, 768)
         self.resize(1175, 900)
         
+        # Apply global stylesheet for dropdown highlighting
+        self.setStyleSheet("""
+            QComboBox {
+                padding: 2px;
+            }
+            
+            QComboBox::drop-down {
+                border: none;
+            }
+            
+            QListView::item:selected, QComboBox::item:selected, QComboBox QAbstractItemView::item:selected {
+                color: white;
+                background-color: #4A90E2;
+            }
+            
+            QListView::item:hover, QComboBox::item:hover, QComboBox QAbstractItemView::item:hover {
+                color: white;
+                background-color: #5A9AE6;
+            }
+            
+            QComboBox QAbstractItemView {
+                selection-color: white;
+                selection-background-color: #4A90E2;
+                border: 1px solid #C0C0C0;
+            }
+        """)
+        
         # Create central widget and main layout
         central = QtWidgets.QWidget()
         self.setCentralWidget(central)
@@ -565,4 +592,67 @@ class MainWindow(QtWidgets.QMainWindow):
             print(f"Error displaying blade profile: {e}")
             QtWidgets.QMessageBox.warning(self, "Error", f"Failed to display blade profile: {str(e)}")
             
-    
+    def confirm_profile_change(self, param_name, combo_box):
+        """Show confirmation dialog for profile change and reload data if confirmed"""
+        # Get the original and new values
+        original_value = combo_box.property("original_value")
+        new_data = combo_box.currentData()
+        
+        # Only show confirmation if this isn't the initial setting and the value actually changed
+        if original_value is not None and new_data != original_value:
+            # Create confirmation message
+            if param_name == 'start_blade':
+                message = "Changing the blade profile will affect all parameters in the current profile.\n\n"
+                message += "This change may also affect other sound fonts that use this profile.\n\n"
+                message += "Do you want to continue?"
+            else:  # start_color
+                message = "Changing the color profile will affect all color-related parameters.\n\n"
+                message += "Do you want to continue?"
+            
+            # Show confirmation dialog
+            confirm = QtWidgets.QMessageBox.question(
+                self, "Confirm Profile Change", message,
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No
+            )
+            
+            if confirm == QtWidgets.QMessageBox.Yes:
+                # Get current font selection
+                current_item = self.font_list.currentItem()
+                if current_item:
+                    font_path = Path(current_item.data(QtCore.Qt.UserRole))
+                    
+                    # Update the profile in settings
+                    try:
+                        # Get current font configuration
+                        settings = self.file_handler.load_font_config(font_path)
+                        if settings:
+                            # Update the profile number
+                            settings[param_name] = new_data
+                            
+                            # Save the updated settings
+                            self.file_handler.save_font_config(font_path, settings)
+                            
+                            # Reload the font to display updated settings
+                            self.on_font_selected(current_item)
+                            
+                            # Show success message
+                            QtWidgets.QMessageBox.information(
+                                self, "Profile Updated", 
+                                f"The {param_name} has been updated to {new_data}."
+                            )
+                    except Exception as e:
+                        print(f"Error updating profile: {e}")
+                        QtWidgets.QMessageBox.critical(
+                            self, "Error", f"Failed to update profile: {str(e)}"
+                        )
+            else:
+                # Revert to original selection if user cancels
+                if original_value is not None:
+                    # Find the index for the original value
+                    original_index = combo_box.findData(original_value)
+                    if original_index >= 0:
+                        # Block signals to prevent recursive confirmation dialog
+                        combo_box.blockSignals(True)
+                        combo_box.setCurrentIndex(original_index)
+                        combo_box.blockSignals(False)

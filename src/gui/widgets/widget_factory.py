@@ -30,7 +30,7 @@ def create_parameter_widget(param_name: str, param_def: dict, current_value: str
     elif display_type == 'color_picker':
         return create_color_picker_widget(param_name, param_def)
     elif display_type == 'text_input':
-        return create_text_input_widget(param_name, param_def)
+        return create_text_widget(param_name, param_def)
     else:
         raise ValueError(f"Unknown display type: {display_type} for parameter {param_name}")
 
@@ -222,3 +222,105 @@ def create_toggle_widget(param_name, param_def):
     layout.addWidget(toggle)
     
     return container, toggle
+
+def create_blade_profile_dropdown(param_name, param_def, main_window=None):
+    """Create dropdown for blade profiles with profile numbers and names"""
+    container = QtWidgets.QWidget()
+    layout = QtWidgets.QVBoxLayout(container)
+    layout.setContentsMargins(4, 4, 4, 4)
+    
+    combo = QtWidgets.QComboBox()
+    
+    # Store the original value to detect changes
+    combo.setProperty("original_value", None)
+    
+    # Add special "-1" option
+    combo.addItem("Default (-1)", "-1")
+    
+    # Add blade profiles with names if available
+    if main_window and hasattr(main_window, 'file_handler'):
+        # Get all blade profiles with names
+        blade_profiles = {}
+        config_path = main_window.folder_path / "config.txt"
+        
+        try:
+            if config_path.exists():
+                current_profile = None
+                with open(config_path, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith('[profile='):
+                            try:
+                                current_profile = int(line[9:-1])
+                                blade_profiles[current_profile] = f"Profile {current_profile}"
+                            except ValueError:
+                                continue
+                        elif '=' in line and current_profile is not None:
+                            key, value = line.split('=', 1)
+                            key = key.strip()
+                            if key == 'pname':
+                                blade_profiles[current_profile] = f"Profile {current_profile} ({value.strip()})"
+                
+                # Add profiles to dropdown
+                for profile_num in sorted(blade_profiles.keys()):
+                    combo.addItem(blade_profiles[profile_num], str(profile_num))
+        except Exception as e:
+            print(f"Error loading blade profiles for dropdown: {e}")
+    
+    # Connect change signal to confirmation handler
+    if main_window:
+        combo.currentIndexChanged.connect(
+            lambda index: main_window.confirm_profile_change(param_name, combo)
+        )
+    
+    layout.addWidget(combo)
+    return container, combo
+
+def create_color_profile_dropdown(param_name, param_def, main_window=None):
+    """Create dropdown for color profiles with profile numbers and color names"""
+    container = QtWidgets.QWidget()
+    layout = QtWidgets.QVBoxLayout(container)
+    layout.setContentsMargins(4, 4, 4, 4)
+    
+    combo = QtWidgets.QComboBox()
+    
+    # Store the original value to detect changes
+    combo.setProperty("original_value", None)
+    
+    # Add special "-1" option
+    combo.addItem("Default (-1)", "-1")
+    
+    # Add color profiles with names if available
+    if main_window and hasattr(main_window, 'color_profiles'):
+        for profile_num in sorted(main_window.color_profiles.keys()):
+            profile = main_window.color_profiles.get(profile_num, {})
+            color_name = profile.get('color_name', 'Unknown')
+            combo.addItem(f"Color {profile_num} ({color_name})", str(profile_num))
+    
+    # Connect change signal to confirmation handler
+    if main_window:
+        combo.currentIndexChanged.connect(
+            lambda index: main_window.confirm_profile_change(param_name, combo)
+        )
+    
+    layout.addWidget(combo)
+    return container, combo
+    """Create dropdown for color profiles with profile numbers and color names"""
+    container = QtWidgets.QWidget()
+    layout = QtWidgets.QVBoxLayout(container)
+    layout.setContentsMargins(4, 4, 4, 4)
+    
+    combo = QtWidgets.QComboBox()
+    
+    # Add special "-1" option
+    combo.addItem("Default (-1)", "-1")
+    
+    # Add color profiles with names if available
+    if main_window and hasattr(main_window, 'color_profiles'):
+        for profile_num in sorted(main_window.color_profiles.keys()):
+            profile = main_window.color_profiles.get(profile_num, {})
+            color_name = profile.get('color_name', 'Unknown')
+            combo.addItem(f"Color {profile_num} ({color_name})", str(profile_num))
+    
+    layout.addWidget(combo)
+    return container, combo

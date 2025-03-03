@@ -7,6 +7,7 @@ from PySide6.QtCore import Signal, Qt, QTimer, QPoint
 from pathlib import Path
 import json
 from PySide6 import QtWidgets
+from gui.widgets.widget_factory import create_blade_profile_dropdown, create_color_profile_dropdown
 
 # Import widget factory functions
 from .widget_factory import (
@@ -192,8 +193,11 @@ class SettingsGrid(QWidget):
                 try:
                     container = None  # Initialize container to None
                     widget = None     # Initialize widget to None
-                    
-                    if display_type == 'text_input':
+                    if param_name == 'start_blade':
+                        container, widget = create_blade_profile_dropdown(param_name, param_def, self.main_window)
+                    elif param_name == 'start_color':
+                        container, widget = create_color_profile_dropdown(param_name, param_def, self.main_window)
+                    elif display_type == 'text_input':
                         container, widget = create_text_widget(param_name, param_def)
                     elif display_type == 'spinner':
                         container, widget = create_spinner_widget(param_name, param_def)
@@ -215,6 +219,26 @@ class SettingsGrid(QWidget):
                         container.setFixedWidth(300)
                         
                         # Set value based on widget type
+                        if isinstance(widget, QComboBox):
+                            # For start_blade and start_color, extract just the number part
+                            if param_name in ['start_blade', 'start_color']:
+                                # Remove any "(from prefs)" suffix
+                                clean_value = value.split(" ")[0] if " " in value else value
+                                index = widget.findData(str(clean_value))
+                            else:
+                                index = widget.findData(str(value))
+                                
+                            if index >= 0:
+                                # Block signals during initial setup
+                                widget.blockSignals(True)
+                                widget.setCurrentIndex(index)
+                                widget.blockSignals(False)
+                                
+                                # Store original value for change detection
+                                if param_name in ['start_blade', 'start_color']:
+                                    clean_value = value.split(" ")[0] if " " in value else value
+                                    widget.setProperty("original_value", str(clean_value))
+                                    
                         if isinstance(widget, QLineEdit):
                             widget.setText(str(value))
                         elif isinstance(widget, QSpinBox):
