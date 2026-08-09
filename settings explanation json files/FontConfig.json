@@ -1,0 +1,316 @@
+{
+  "TypeConfig": "FontConfig",
+  "CfxProperties": [
+    {
+      "Name": "start_blade",
+      "FriendlyName": "Start blade",
+      "Category": "Behavior",
+      "SubCategory": "Blade profile",
+      "Type": "int",
+      "MinValue": -1,
+      "MaxValue": 32,
+      "ExampleValue": "-1",
+      "Simple": 1,
+      "Description": "defines a specific blade profile to start with when this specific font is selected. Overrides the last used profile saved in prefs.txt. -1 disables the feature and let the stored value from prefs.txt be used at boot time."
+    },
+    {
+      "Name": "start_color",
+      "FriendlyName": "Start color",
+      "Category": "Behavior",
+      "SubCategory": "Color",
+      "Type": "int",
+      "MinValue": -1,
+      "MaxValue": 32,
+      "ExampleValue": "-1",
+      "Simple": 1,
+      "Description": "defines a specific color profile to start with when this specific font is selected. Overrides the last used profile saved in prefs.txt. -1 disables the feature and let the stored value from prefs.txt be used at boot time."
+    },
+    {
+      "Name": "qon",
+      "FriendlyName": "Quick on",
+      "Category": "Blade Fx",
+      "SubCategory": "Ignition",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 10000,
+      "ExampleValue": "0",
+      "Simple": 1,
+      "Description": "Allows having the blade ignited in a specific amount of time rather than matching the duration of the power on sound and should not exceed the duration of any power on sounds. Almost mandatory for ledstrip blade to have a visually satisfying scrolling ignition."
+    },
+    {
+      "Name": "qoff",
+      "FriendlyName": "Quick off",
+      "Category": "Blade Fx",
+      "SubCategory": "Ignition",
+      "Type": "int",
+      "MinValue": 1,
+      "MaxValue": 10000,
+      "ExampleValue": "0",
+      "Simple": 1,
+      "Description": "Allows having the blade retracted in a specific amount of time rather than matching the duration of the power off sound and should not exceed the duration of any power on sounds. Almost mandatory for ledstrip blade to have a visually satisfying scrolling retraction."
+    },
+    {
+      "Name": "tridenton",
+      "FriendlyName": "Delay on ignition of secondairy blades",
+      "Category": "Blade Fx",
+      "SubCategory": "Trident",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3000,
+      "ExampleValue": "0",
+      "Simple": 0,
+      "Description": "Defines the delay of the secondary blades, in the case of a cross-guard saber. Should remain < to the duration of the power on sound."
+    },
+    {
+      "Name": "tridentoff",
+      "FriendlyName": "Delay on retraction of secondairy blades",
+      "Category": "Blade Fx",
+      "SubCategory": "Trident",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3000,
+      "ExampleValue": "0",
+      "Simple": 0,
+      "Description": "Same as tridenton but during the power-off. If zero, there is no Trident effect during the blade retraction and all channels fade out normally."
+    },
+    {
+      "Name": "used_profiles_blade",
+      "FriendlyName": "Blade profile mask",
+      "Category": "Behavior",
+      "SubCategory": "Blade profile",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "ExampleValue": "11111111111111111111111111111111",
+      "Simple": 0,
+      "Description": "A 32‑bit bitmask in which each bit corresponds to one of up to 32 blade profiles. A bit value of 1 means “enable” that profile during on‑the‑fly color switching, and 0 means “disable” it."
+    },
+    {
+      "Name": "used_profiles_color",
+      "FriendlyName": "Color profile mask",
+      "Category": "Behavior",
+      "SubCategory": "Color",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "ExampleValue": "11111111111111111111111111111111",
+      "Simple": 0,
+      "Description": "A 32‑bit bitmask in which each bit corresponds to one of up to 32 color profiles. A bit value of 1 means “enable” that profile during on‑the‑fly color switching, and 0 means “disable” it."
+    },
+    {
+      "Name": "hum_gain",
+      "FriendlyName": "Hum mixing parameter",
+      "Category": "Behavior",
+      "SubCategory": "Beta",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 150,
+      "ExampleValue": "100",
+      "Simple": 0,
+      "Description": "(beta) specific mixing parameter for the hum sound. Leave to 100 (%) for now"
+    },
+    {
+      "Name": "hum_delay",
+      "FriendlyName": "Hum mixing parameter",
+      "Category": "Behavior",
+      "SubCategory": "Beta",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "0",
+      "Simple": 0,
+      "Description": "(beta) Changes the crossfade mixing point of the hum during the ignition sequence. Defined in % of the duration of the (selected) power-on sound. 0% makes the hum starting to ramp from the beginning of the ignition sound. Getting close to 100% will make the ramping coarser obviously, even if computed on a sample-based timeline. To be used rather with POI = 0 or 1 for smooth swing fonts otherwise, motion to sound smoothswing will take over the hum vs. pairs dynamic mixing which will have very little sense with the point the hum delay tries to achieve."
+    },
+    {
+      "Name": "skip",
+      "FriendlyName": "Hide font",
+      "Category": "Behavior",
+      "SubCategory": "Menu",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Simple": 0,
+      "Description": "skips the font in the vocal menu. Allows for having a large amount of font available on the SD card while reducing the selection in the menu (manual setting)"
+    },
+    {
+      "Name": "glyph",
+      "FriendlyName": "Accent LED pattern",
+      "Category": "Behavior",
+      "SubCategory": "Menu",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "ExampleValue": "00100000",
+      "Simple": 0,
+      "Description": "defines the accent LEDs pattern to be displayed when browsing the font from the menu. LED 1 to LED 8 left-to-right ordered, a 1 turns the corresponding LED on."
+    },
+    {
+      "Name": "bolt<n>",
+      "FriendlyName": "Blaster bolt timing",
+      "Category": "Behavior",
+      "SubCategory": "Sound",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 1000000,
+      "ExampleValue": "60,718",
+      "Simple": 0,
+      "Description": "for a blaster2.wav sound featuring 4 impacts. Each number indicates the number of milliseconds from the beginning of the sound file before triggering a bolt impact. bolt1=487,1297,1921"
+    },
+
+    {
+      "Name": "tridentfx",
+      "FriendlyName": "Trident effect mode",
+      "Category": "Blade Fx",
+      "SubCategory": "Trident",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Simple": 0,
+      "Description": "Defines the mode of the Trident effect. Mode 0 is a simple delay, the normal (non-Trident) channel starts ramping up followed by the delayed channel(s) which start(s) after the duration specified by the tridenton parameter. All channels catch up together at the end of the power-on sound. In mode 1, the non-delayed channels will ramp up to their max within the duration of tridenton, then the delayed Trident channels will ramp on their own until the end of the power-on sound. The 2 modes show little differences in behavior if the delay duration is close to the power-on sound duration but are interesting if the delay is < to half of the duration of the power-on sound.",
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Simpel delay",
+          "Description": "the normal (non-Trident) channel starts ramping up followed by the delayed channel(s) which start(s) after the duration specified by the tridenton parameter. All channels catch up together at the end of the power-on sound."
+        },
+        {
+          "Index": 1,
+          "Option": "In sequence",
+          "Description": "the non-delayed channels will ramp up to their max within the duration of tridenton, then the delayed Trident channels will ramp on their own until the end of the power-on sound. "
+        }
+      ]
+    },
+    {
+      "Name": "tridentquick",
+      "FriendlyName": "Trident quick on",
+      "Category": "Blade Fx",
+      "SubCategory": "Trident",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3000,
+      "ExampleValue": "0",
+      "Simple": 0,
+      "Description": "Similar to the quick on and quick off parameters, forces the trident channel(s) ignition time. In multiple of 1ms. If zero, trident channel(s) will keep ramping until the end of the power on sound."
+    },
+    {
+      "Name": "smooth_dampen",
+      "FriendlyName": "Hum dampening %",
+      "Category": "Smoothswing",
+      "SubCategory": "SwingParameters",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "80",
+      "Simple": 0,
+      "Description": "defines the hum dampening (%) when the smoothswing pair is played. 75% means that the hum volume is reduced of 75%"
+    },
+    {
+      "Name": "smooth_gain",
+      "FriendlyName": "Smoothswing volume",
+      "Category": "Smoothswing",
+      "SubCategory": "SwingParameters",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "100",
+      "Simple": 0,
+      "Description": "defines the volume of the smoothswing effect"
+    },
+    {
+      "Name": "smooth_mode",
+      "FriendlyName": "Smoothswing mode",
+      "Category": "Smoothswing",
+      "SubCategory": "SwingParameters",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3,
+      "ExampleValue": "2",
+      "Simple": 0,
+      "Description": "smoothswing mode. 0 disables the smoothswing engine for a smoothswing font. 1 is the standard smoothswing mode, 2 is the hybrid font (aka accent swing) mode for which regular swing and spins can be played if the motion exceeds the hswing threshold3 . Mode 3 uses the blade orientation to control the mix between the hum pairs and the main hum to pseudo-replicate the former CF pitch shifting effect",
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Disabled",
+          "Description": "No smoothswing. (Sad Jedi)"
+        },
+        {
+          "Index": 1,
+          "Option": "Standard smoothswing",
+          "Description": ""
+        },
+        {
+          "Index": 2,
+          "Option": "Hybrid: accent swing",
+          "Description": ""
+        },
+        {
+          "Index": 3,
+          "Option": "Blade orientation",
+          "Description": ""
+        }
+      ]
+    },
+    {
+      "Name": "smooth_physics",
+      "FriendlyName": "Smoothswing pair picking threshold",
+      "Category": "Smoothswing",
+      "SubCategory": "SwingParameters",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 2000,
+      "ExampleValue": "950",
+      "Simple": 0,
+      "Description": "motion milestone threshold to tell the smoothswing engine to change of pair. A high threshold tends to keep the current pair; a low value will produce more pair picking."
+    },
+    {
+      "Name": "smooth_sens",
+      "FriendlyName": "Smoothswing sensitivity",
+      "Category": "Smoothswing",
+      "SubCategory": "SwingParameters",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 2000,
+      "ExampleValue": "250",
+      "Simple": 0,
+      "Description": "smoothswing overall sensitivity to blade rotation (in �/s). A low value will bring the smoothswing effect to its maximum volume with a small motion. A large value will require faster rotations to bring the volume to the maximum. Works with the sharpness parameter above"
+    },
+    {
+      "Name": "smooth_sharp",
+      "FriendlyName": "Swing sharpness",
+      "Category": "Smoothswing",
+      "SubCategory": "SwingParameters",
+      "Type": "decimal",
+      "MinValue": 0.01,
+      "MaxValue": 4.0,
+      "ExampleValue": "3.0",
+      "Simple": 0,
+      "Description": "brings softness (< 1.0) or sharpness (> 1.0) to the mapping between the blade rotation and the smoothswing expressivity. A value of 1.5 adds a bit of exponential mapping (small blade moves are amplified). Values > 1.0 make the smoothswing engine more expressive even with small motions"
+    },
+    {
+      "Name": "smooth_width1",
+      "FriendlyName": "Smooth widht 1",
+      "Category": "Smoothswing",
+      "SubCategory": "SwingParameters",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 360,
+      "ExampleValue": "45",
+      "Simple": 0,
+      "Description": "angular regions (�) in which the high and low pairs transition and cross fade to produce the pitch effect. The first region is usually set to a low(er) value to start producing a pitch offset early with the beginning of the motion, while the second transition occurs close to a half spin (180�)."
+    },
+    {
+      "Name": "smooth_width2",
+      "FriendlyName": "Smooth widht 2",
+      "Category": "Smoothswing",
+      "SubCategory": "SwingParameters",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 360,
+      "ExampleValue": "160",
+      "Simple": 0,
+      "Description": "angular regions (�) in which the high and low pairs transition and cross fade to produce the pitch effect. The first region is usually set to a low(er) value to start producing a pitch offset early with the beginning of the motion, while the second transition occurs close to a half spin (180�)."
+    }
+  ]
+}

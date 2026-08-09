@@ -9,8 +9,96 @@ class CFXValidationError(Exception):
 
 class CFXValidator:
     """Validates CFX folder structure and file contents."""
-    
+
     REQUIRED_FILES = ['config.txt', 'colors.txt']
+
+    # Groups of parameters with a documented relationship (see check_cross_parameter_rules).
+    # Used by the GUI to know which widgets should trigger live re-validation of each other.
+    CROSS_PARAM_RULE_GROUPS = [
+        ('qon', 'ignd'),
+        ('qoff', 'retd'),
+        ('offp', 'offd'),
+    ]
+
+    @staticmethod
+    def value_out_of_range(param_def: Optional[dict], raw_value: str) -> Optional[str]:
+        """Check a raw (string) parameter value against its declared 'range' in
+        parameters.json. Handles single values as well as the comma-joined pairs/triples
+        used by range_pair and triple_range params. Returns an error message if the value
+        falls outside its declared bounds, or None if it's fine / there's nothing to check.
+
+        This deliberately doesn't try to parse values that don't look numeric at all -
+        that's a type/format mismatch, a different failure mode already caught by
+        widget_factory.set_widget_value().
+        """
+        if not param_def or 'range' not in param_def:
+            return None
+
+        display_type = param_def.get('display_type')
+        rng = param_def['range']
+
+        try:
+            if display_type in ('range_pair', 'triple_range'):
+                parts = [float(p) for p in str(raw_value).split(',')]
+            else:
+                parts = [float(raw_value)]
+        except (ValueError, TypeError):
+            return None
+
+        if display_type == 'triple_range' and len(rng) >= 4:
+            # [a_min, a_max, b_min, b_max]: first value uses the a-bounds, the rest use b-bounds
+            bounds = [(rng[0], rng[1])] + [(rng[2], rng[3])] * (len(parts) - 1)
+        else:
+            lo = rng[0]
+            hi = rng[1] if len(rng) > 1 else rng[0]
+            bounds = [(lo, hi)] * len(parts)
+
+        for value, (lo, hi) in zip(parts, bounds):
+            if value < lo or value > hi:
+                return f"'{raw_value}' is outside the declared range [{lo}, {hi}]"
+
+        return None
+
+    @staticmethod
+    def check_cross_parameter_rules(settings: Dict[str, str]) -> Dict[str, str]:
+        """Check relationships between specific parameters that are explicitly documented
+        in their parameters.json 'notes'/'description' text. Returns {param_name: message}
+        for every parameter involved in a violated rule.
+
+        Deliberately conservative: CFX doesn't define general inter-parameter dependencies
+        (per project notes), so only relationships with a clear textual source are checked
+        here rather than guessed at.
+        """
+        errors: Dict[str, str] = {}
+
+        def as_int(name):
+            try:
+                return int(settings[name])
+            except (KeyError, ValueError, TypeError):
+                return None
+
+        qon, ignd = as_int('qon'), as_int('ignd')
+        if qon is not None and ignd is not None and qon < ignd:
+            msg = ("qon (quick-on duration) should be >= ignd (ignition delay) - "
+                   "CFX docs: \"Set qon = desired_duration + ignd\"")
+            errors['qon'] = msg
+            errors['ignd'] = msg
+
+        qoff, retd = as_int('qoff'), as_int('retd')
+        if qoff is not None and retd is not None and qoff < retd:
+            msg = ("qoff (quick-off duration) should be >= retd (retraction delay) - "
+                   "CFX docs: retd is \"similar to ignd, adjust qoff accordingly\"")
+            errors['qoff'] = msg
+            errors['retd'] = msg
+
+        offp, offd = settings.get('offp'), as_int('offd')
+        if offp == '1' and offd is not None and offd != 0:
+            msg = ("offd should be 0 when offp (Anti Power-Off Protection) is enabled - "
+                   "CFX docs: \"Set to zero if using offp parameter\"")
+            errors['offp'] = msg
+            errors['offd'] = msg
+
+        return errors
     
     @staticmethod
     def validate_root_folder(folder_path: str) -> Tuple[bool, List[str]]:
@@ -114,8 +202,8 @@ class CFXValidator:
                         
         except Exception as e:
             errors.append(f"Error reading config file: {str(e)}")
-            
-        return len(errors) == 0, errors, settings if len(errors) == 0 else None
+
+        return len(errors) == 0, errors, settings
 
     @staticmethod
     def validate_colors_file(file_path: Path) -> Tuple[bool, List[str], Optional[Dict]]:
@@ -148,8 +236,8 @@ class CFXValidator:
                         
         except Exception as e:
             errors.append(f"Error reading colors file: {str(e)}")
-            
-        return len(errors) == 0, errors, colors if len(errors) == 0 else None
+
+        return len(errors) == 0, errors, colors
 
     @staticmethod
     def validate_font_config(file_path: Path) -> Tuple[bool, List[str], Optional[Dict]]:

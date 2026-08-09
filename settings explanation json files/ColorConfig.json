@@ -1,0 +1,137 @@
+{
+  "TypeConfig": "ColorConfig",
+  "CfxProperties": [
+    {
+      "Name": "color",
+      "FriendlyName": "Blade color",
+      "Category": "ColorProfile",
+      "SubCategory": "Color",
+      "Type": "quadrange",
+      "MinValue": 0,
+      "MaxValue": 1023,
+      "Description": "Blade color",
+      "ExampleValue": "1023,0,0,0"
+    },
+    {
+      "Name": "fcolor",
+      "FriendlyName": "Flash on Clash color",
+      "Category": "ColorProfile",
+      "SubCategory": "Color",
+      "Type": "quadrange",
+      "MinValue": 0,
+      "MaxValue": 1023,
+      "Description": "Flash on Clash color",
+      "ExampleValue": "1023,1023,1023,0"
+    },
+    {
+      "Name": "lcolor",
+      "FriendlyName": "Lockup color",
+      "Category": "ColorProfile",
+      "SubCategory": "Color",
+      "Type": "quadrange",
+      "MinValue": 0,
+      "MaxValue": 1023,
+      "Description": "Lockup color",
+      "ExampleValue": "1023,1023,1023,0"
+    },
+    {
+      "Name": "bcolor",
+      "FriendlyName": "Blaster bolt color",
+      "Category": "ColorProfile",
+      "SubCategory": "Color",
+      "Type": "quadrange",
+      "MinValue": 0,
+      "MaxValue": 1023,
+      "Description": "Blaster bolt color",
+      "ExampleValue": "1023,1023,1023,0"
+    },
+    {
+      "Name": "xcolor",
+      "FriendlyName": "Crystal Chamber color",
+      "Category": "ColorProfile",
+      "SubCategory": "Color",
+      "Type": "quadrange",
+      "MinValue": 0,
+      "MaxValue": 1023,
+      "Description": "The dedicated xcolor part of the color profile defines the crystal chamber color (see the accent sequencer section) profile. Crystal chamber drive values are expressed between 0 and 1023 like the other colors.",
+      "ExampleValue": "1023,1023,1023,0"
+    },
+    {
+      "Name": "mcolor",
+      "FriendlyName": "Flash on Clash mixing configuration",
+      "Category": "ColorProfile",
+      "SubCategory": "Color",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "Description": "Flash on Clash mixing configuration. Color profiles also embed a �per color profile� FoC Mixing parameter with mcolor. This ensures to get the best / adapted Flash on Clash mixing strategy for any color defined by the profile. Refer to the dedicated Flash on Clash mixing paragraph.",
+      "ExampleValue": "1000"
+    },
+    {
+      "Name": "ecolor",
+      "FriendlyName": "Fx color configuration",
+      "Category": "ColorProfile",
+      "SubCategory": "Color",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "Description": "Fx color.",
+      "ExampleValue": "1023,0,0,0"
+    },
+    {
+      "Name": "kcolor",
+      "FriendlyName": "Flicker color configuration",
+      "Category": "ColorProfile",
+      "SubCategory": "Color",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "Description": "Flicker color.",
+      "ExampleValue": "1023,0,0,0"
+    },
+    {
+      "Name": "tcolor",
+      "FriendlyName": "Stab color configuration",
+      "Category": "ColorProfile",
+      "SubCategory": "Color",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "Description": "Stab color.",
+      "ExampleValue": "1023,0,0,0"
+    },
+    {
+      "Name": "dcolor",
+      "FriendlyName": "Drag color configuration",
+      "Category": "ColorProfile",
+      "SubCategory": "Color",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "Description": "Drag color.",
+      "ExampleValue": "1023,0,0,0"
+    },
+    {
+      "Name": "tridentm",
+      "FriendlyName": "Trident channels configuration",
+      "Category": "ColorProfile",
+      "SubCategory": "Color",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "Description": "Trident channels configuration",
+      "ExampleValue": "0000"
+    },
+    {
+      "Name": "cname",
+      "FriendlyName": "Name of the profile",
+      "Category": "ColorProfile",
+      "SubCategory": "Color",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "Description": "A nice name for the colorprofile",
+      "ExampleValue": "Sith Red"
+    }
+  ]
+}

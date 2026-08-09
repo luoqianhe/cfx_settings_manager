@@ -1,13 +1,16 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QGridLayout, QLabel, 
+    QWidget, QVBoxLayout, QGridLayout, QLabel,
     QPushButton, QFrame, QScrollArea, QTableWidgetItem, QHeaderView,
-    QLineEdit, QSpinBox, QComboBox, QHBoxLayout
+    QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QHBoxLayout, QCheckBox
 )
 from PySide6.QtCore import Signal, Qt, QTimer, QPoint
 from pathlib import Path
+from typing import Optional
 import json
+import re
 from PySide6 import QtWidgets
 from gui.widgets.widget_factory import create_blade_profile_dropdown, create_color_profile_dropdown
+from core.validators import CFXValidator
 
 # Import widget factory functions
 from .widget_factory import (
@@ -17,8 +20,32 @@ from .widget_factory import (
     create_toggle_widget,
     create_range_pair_widget,
     create_color_picker_widget,
-    create_triple_range_widget
+    create_triple_range_widget,
+    get_widget_value,
+    set_widget_value
 )
+
+# Highlighting colors used in the parameter grid
+SHARED_PARAM_COLOR = "#FFF3B0"   # yellow - value is shared with other soundfonts/profiles
+ERROR_PARAM_COLOR = "#FFB3B3"    # red - value fails validation (out of range, malformed, etc.)
+SHARED_PARAM_TEXT_COLOR = "#8a6d00"
+ERROR_PARAM_TEXT_COLOR = "#B00020"
+
+# Dropdown params whose options are looked up from indexed resource folders on the loaded
+# SD card (/extra/grafx, /extra/accents, /extra/pixies) rather than a fixed set of meanings -
+# see widget_factory.create_dropdown_widget. A value that doesn't match here means "points to
+# a profile number that wasn't found among that folder's contents", not a real type mismatch.
+DYNAMIC_FOLDER_DROPDOWN_PARAMS = {
+    'style_grafx1', 'style_grafx2', 'style_grafx3', 'style_accents', 'style_pixies'
+}
+
+# The RICE schema documents a handful of parameters as a numbered family rather than a single
+# name - e.g. bolt<n> for a blaster sound's per-impact timings (bolt0, bolt1, ...), one entry
+# per numbered slot rather than a fixed name. parameters.json carries these through verbatim
+# as the literal '<n>'-suffixed template name rather than expanding them (there's no fixed
+# upper bound to expand to), so a real on-disk name like 'bolt3' has to be resolved back to
+# its 'bolt<n>' template.
+INDEXED_PARAM_NAME_RE = re.compile(r'^(.*?)(\d+)$')
 class SettingsGrid(QWidget):
     def __init__(self, title: str, main_window=None, column_stretches=None, parent=None):
         super().__init__(parent)
@@ -28,6 +55,18 @@ class SettingsGrid(QWidget):
         self.current_settings = {}
         self.param_definitions = {}
         self.category_labels = {}
+        self.param_widgets = {}  # param_name -> (widget, display_type), for reading live values back
+        self.param_sources = {}  # param_name -> 'font' | 'blade' | 'color' | 'global', which file it saves to
+        self.param_containers = {}  # param_name -> (name_container, value_container), for validation highlighting
+        self.param_control_widgets = {}  # param_name -> raw input widget(s), so tooltips reach what's under the cursor
+        self.static_param_errors = {}  # param_name -> message, computed once when the grid is built
+        self.param_errors = {}  # static_param_errors + live cross-parameter rule violations
+        self.shared_parameters = set()
+        self.shared_with = None
+        self.category_params = {}  # category -> [(param_name, value), ...], for the error banner
+        self.category_header_layouts = {}  # category -> QHBoxLayout, so the error banner can be added/removed live
+        self.category_error_banner_labels = {}  # category -> QLabel currently shown, or absent
+        self.unknown_params = []  # [(param_name, value), ...] not found in parameters.json
         self.load_parameter_definitions()
         self.init_ui()
 
@@ -89,11 +128,11 @@ class SettingsGrid(QWidget):
         
         print("===== END COLOR DEBUG =====\n")
     
-    def update_settings(self, settings: dict, shared_with: list = None, shared_parameters: set = None):
+    def update_settings(self, settings: dict, shared_with: list = None, shared_parameters: set = None, param_sources: dict = None):
         """Update displayed settings."""
         # Debug color lookups
         self.color_debug_check()
-    
+
         # Clear existing settings and category labels
         self.category_labels.clear()
         for i in reversed(range(self.grid_layout.count())):
@@ -101,8 +140,23 @@ class SettingsGrid(QWidget):
             if item.widget():
                 item.widget().deleteLater()
 
+        # Snapshot of loaded values (source of truth for any param whose widget failed to build)
+        # and which file each param belongs to, so Save can route values to the right file.
+        self.current_settings = settings.copy()
+        self.param_sources = param_sources or {}
+        self.param_widgets = {}
+        self.param_containers = {}
+        self.param_control_widgets = {}
+        self.static_param_errors = {}
+        self.param_errors = {}
+        self.category_params = {}
+        self.category_header_layouts = {}
+        self.category_error_banner_labels = {}
+
         # Initialize shared parameters if not provided
         shared_parameters = shared_parameters or set()
+        self.shared_parameters = shared_parameters
+        self.shared_with = shared_with
         
         # Extract start_blade and start_color separately
         profiles_params = {}
@@ -114,23 +168,34 @@ class SettingsGrid(QWidget):
         # Group other parameters by category
         categorized_params = {}
         categories = set()
-        
+        # Parameter names found in the loaded files that aren't in parameters.json. Usually a
+        # typo or corruption in a hand-edited config/Special.txt file, but parameters.json -
+        # generated from the RICE schema export - isn't guaranteed complete either (e.g.
+        # ls1_timings/ls2_timings are documented master config.txt parameters RICE itself
+        # doesn't list), so this isn't proof the name is invalid. Tracked instead of silently
+        # dropped so the user can actually see it and judge which case it is.
+        self.unknown_params = []
+
         for param_name, value in settings.items():
             # Skip profile params as they'll be shown at the top
             if param_name in ['start_blade', 'start_color']:
                 continue
-                
-            if param_name not in self.param_definitions:
+
+            param_def = self._lookup_param_def(param_name)
+            if param_def is None:
                 print(f"Parameter not in JSON: {param_name}")
+                self.unknown_params.append((param_name, value))
                 continue
-            
-            param_def = self.param_definitions[param_name]
+
             category = param_def.get('parameter_category', 'Uncategorized')
             categories.add(category)
-            
+
             if category not in categorized_params:
                 categorized_params[category] = []
             categorized_params[category].append((param_name, value))
+
+        if self.unknown_params:
+            categories.add("Unrecognized Parameters")
 
         # Update dropdown with categories (alphabetically sorted)
         if self.main_window and hasattr(self.main_window, 'category_dropdown'):
@@ -227,8 +292,13 @@ class SettingsGrid(QWidget):
 
                     if container:
                         container.setFixedWidth(300)
-                        
-                        # Set value based on widget type
+
+                        # Set value based on widget type. Only remember the widget for saving
+                        # later (param_widgets) if we could faithfully load the value into it -
+                        # otherwise the parameter's declared display_type doesn't match what's
+                        # actually stored on disk, and reading a default back out on save would
+                        # silently corrupt it.
+                        value_applied = False
                         if isinstance(widget, QComboBox):
                             # For start_blade and start_color, extract just the number part
                             if param_name in ['start_blade', 'start_color']:
@@ -237,48 +307,34 @@ class SettingsGrid(QWidget):
                                 index = widget.findData(str(clean_value))
                             else:
                                 index = widget.findData(str(value))
-                                
+
                             if index >= 0:
                                 # Block signals during initial setup
                                 widget.blockSignals(True)
                                 widget.setCurrentIndex(index)
                                 widget.blockSignals(False)
-                                
+                                value_applied = True
+
                                 # Store original value for change detection
                                 if param_name in ['start_blade', 'start_color']:
                                     clean_value = value.split(" ")[0] if " " in value else value
                                     widget.setProperty("original_value", str(clean_value))
-                                    
-                        if isinstance(widget, QLineEdit):
-                            widget.setText(str(value))
-                        elif isinstance(widget, QSpinBox):
-                            try:
-                                # Try to convert to int - this might fail for decimal values
-                                widget.setValue(int(value))
-                            except ValueError:
-                                # For decimal values, try to convert to float and round
-                                try:
-                                    widget.setValue(round(float(value)))
-                                except ValueError:
-                                    # Just set text if all else fails
-                                    if hasattr(widget, 'setText'):
-                                        widget.setText(str(value))
-                        elif isinstance(widget, tuple):
-                            if display_type == 'range_pair':
-                                min_val, max_val = map(int, value.split(','))
-                                widget[0].setValue(min_val)
-                                widget[1].setValue(max_val)
-                            elif display_type == 'triple_range':
-                                angle, min_val, max_val = map(int, value.split(','))
-                                widget[0].setValue(angle)
-                                widget[1].setValue(min_val)
-                                widget[2].setValue(max_val)
-                            elif display_type == 'color_picker':
-                                r, g, b, w = map(int, value.split(','))
-                                widget[0]['R'][1].setValue(r)
-                                widget[0]['G'][1].setValue(g)
-                                widget[0]['B'][1].setValue(b)
-                                widget[0]['W'][1].setValue(w)
+                        else:
+                            value_applied = set_widget_value(widget, display_type, value, param_name)
+
+                        self.param_containers[param_name] = (name_container, container)
+                        self.param_control_widgets[param_name] = widget
+
+                        if value_applied:
+                            self.param_widgets[param_name] = (widget, display_type)
+                            range_error = CFXValidator.value_out_of_range(param_def, value)
+                            if range_error:
+                                self.static_param_errors[param_name] = range_error
+                        else:
+                            self.static_param_errors[param_name] = self._mismatch_message(
+                                param_name, display_type, value)
+                            print(f"Value '{value}' doesn't match declared display_type "
+                                  f"'{display_type}' for {param_name} - leaving it out of Save")
 
                         # Add color preview for start_color parameter
                         if param_name == 'start_color':
@@ -376,8 +432,10 @@ class SettingsGrid(QWidget):
 
         # Process regular categories
         for index, category in enumerate(sorted(categorized_params.keys())):
+            self.category_params[category] = categorized_params[category]
+
             # Check if this category has any shared parameters
-            category_has_shared_params = any(param_name in shared_parameters 
+            category_has_shared_params = any(param_name in shared_parameters
                                         for param_name, _ in categorized_params[category])
             
             # Add separator before each category (except the first one after profiles)
@@ -406,18 +464,20 @@ class SettingsGrid(QWidget):
             # Add warning label if category has shared parameters
             if category_has_shared_params and shared_with:
                 warning_label = QLabel("Highlighted parameters are used by multiple soundfonts")
-                warning_label.setStyleSheet("""
-                    color: #FF0000;
+                warning_label.setStyleSheet(f"""
+                    color: {SHARED_PARAM_TEXT_COLOR};
                     font-style: italic;
                     padding-left: 20px;
                 """)
                 header_layout.addWidget(warning_label)
-            
+
             header_layout.addStretch()
             self.grid_layout.addWidget(header_container, row, 0, 1, 3)
-            
-            # Store reference to the category label
+
+            # Store reference to the category label and header layout (the error banner,
+            # if any, gets added/removed from this layout later once validation runs)
             self.category_labels[category] = category_label
+            self.category_header_layouts[category] = header_layout
             row += 1
 
             # Create container for this category's parameters with alternating background
@@ -437,7 +497,7 @@ class SettingsGrid(QWidget):
             sorted_params = sorted(categorized_params[category], key=lambda x: x[0])
             
             for param_name, value in sorted_params:
-                param_def = self.param_definitions[param_name]
+                param_def = self._lookup_param_def(param_name)
                 display_type = param_def.get('display_type', 'text')
 
                 # Create a container for parameter name and description
@@ -457,10 +517,6 @@ class SettingsGrid(QWidget):
                     desc_label.setStyleSheet("font-style: italic; color: #666666; font-size: 11px;")
                     desc_label.setWordWrap(True)
                     name_layout.addWidget(desc_label)
-
-                # Highlight shared parameters
-                if param_name in shared_parameters and shared_with:
-                    name_container.setStyleSheet("background-color: #FFE0E0;")  # Light red background
 
                 category_layout.addWidget(name_container, param_row, 0)
 
@@ -489,48 +545,26 @@ class SettingsGrid(QWidget):
 
                     if container:
                         container.setFixedWidth(300)
-                        
-                        # Highlight shared parameters
-                        if param_name in shared_parameters and shared_with:
-                            container.setStyleSheet("background-color: #FFE0E0;")  # Light red background
-                            
                         category_layout.addWidget(container, param_row, 1)
-                        
-                        # Set value based on widget type
-                        if isinstance(widget, QLineEdit):
-                            widget.setText(str(value))
-                        elif isinstance(widget, QSpinBox):
-                            try:
-                                # Try to convert to int - this might fail for decimal values
-                                widget.setValue(int(value))
-                            except ValueError:
-                                # For decimal values, try to convert to float and round
-                                try:
-                                    widget.setValue(round(float(value)))
-                                except ValueError:
-                                    # Just set text if all else fails
-                                    if hasattr(widget, 'setText'):
-                                        widget.setText(str(value))
-                        elif isinstance(widget, QComboBox):
-                            index = widget.findData(str(value))
-                            if index >= 0:
-                                widget.setCurrentIndex(index)
-                        elif isinstance(widget, tuple):
-                            if display_type == 'range_pair':
-                                min_val, max_val = map(int, value.split(','))
-                                widget[0].setValue(min_val)
-                                widget[1].setValue(max_val)
-                            elif display_type == 'triple_range':
-                                angle, min_val, max_val = map(int, value.split(','))
-                                widget[0].setValue(angle)
-                                widget[1].setValue(min_val)
-                                widget[2].setValue(max_val)
-                            elif display_type == 'color_picker':
-                                r, g, b, w = map(int, value.split(','))
-                                widget[0]['R'][1].setValue(r)
-                                widget[0]['G'][1].setValue(g)
-                                widget[0]['B'][1].setValue(b)
-                                widget[0]['W'][1].setValue(w)
+                        self.param_containers[param_name] = (name_container, container)
+                        self.param_control_widgets[param_name] = widget
+
+                        # Set value based on widget type. Only remember the widget for saving
+                        # later (param_widgets) if we could faithfully load the value into it -
+                        # otherwise the parameter's declared display_type doesn't match what's
+                        # actually stored on disk, and reading a default back out on save would
+                        # silently corrupt it.
+                        if widget is not None:
+                            if set_widget_value(widget, display_type, value, param_name):
+                                self.param_widgets[param_name] = (widget, display_type)
+                                range_error = CFXValidator.value_out_of_range(param_def, value)
+                                if range_error:
+                                    self.static_param_errors[param_name] = range_error
+                            else:
+                                self.static_param_errors[param_name] = self._mismatch_message(
+                                    param_name, display_type, value)
+                                print(f"Value '{value}' doesn't match declared display_type "
+                                      f"'{display_type}' for {param_name} - leaving it out of Save")
 
                     # Add notes if available
                     if 'notes' in param_def:
@@ -552,7 +586,209 @@ class SettingsGrid(QWidget):
             # Add the category container to the main grid
             self.grid_layout.addWidget(category_container, row, 0, 1, 3)
             row += 1
-     
+
+        if self.unknown_params:
+            row = self._add_unknown_params_section(row)
+
+        self._connect_cross_param_rules()
+        self._revalidate()
+
+    def _add_unknown_params_section(self, row: int) -> int:
+        """Render self.unknown_params - parameter names loaded from disk that aren't in
+        parameters.json - as a distinct, clearly-flagged section instead of the silent
+        drop this used to be. These are read-only here (no schema means no display_type to
+        build a real input widget from); the point is visibility, not editing. The raw
+        value is preserved as-is in current_settings and will round-trip through Save
+        untouched, same as before this section existed."""
+        if row > 0:
+            separator = QFrame()
+            separator.setFrameShape(QFrame.HLine)
+            separator.setFrameShadow(QFrame.Sunken)
+            separator.setStyleSheet("QFrame { color: #cccccc; }")
+            self.grid_layout.addWidget(separator, row, 0, 1, 3)
+            row += 1
+
+        header_container = QWidget()
+        header_layout = QHBoxLayout(header_container)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+
+        header_label = QLabel("Unrecognized Parameters")
+        header_label.setStyleSheet(f"""
+            font-weight: bold;
+            font-size: 14px;
+            color: {ERROR_PARAM_TEXT_COLOR};
+            padding: 10px 0px 10px 0px;
+        """)
+        header_layout.addWidget(header_label)
+
+        warning_label = QLabel(
+            "Not found in the CFX parameter schema - often a typo or a stray line in a "
+            "hand-edited file, but the schema itself isn't guaranteed complete either. "
+            "Values are preserved as-is but can't be edited here."
+        )
+        warning_label.setStyleSheet(f"color: {ERROR_PARAM_TEXT_COLOR}; font-style: italic; padding-left: 20px;")
+        header_layout.addWidget(warning_label)
+        header_layout.addStretch()
+
+        self.grid_layout.addWidget(header_container, row, 0, 1, 3)
+        self.category_labels["Unrecognized Parameters"] = header_label
+        row += 1
+
+        section_container = QWidget()
+        section_container.setStyleSheet(f"background-color: {ERROR_PARAM_COLOR};")
+        section_layout = QGridLayout(section_container)
+        section_layout.setContentsMargins(0, 0, 0, 10)
+        section_layout.setSpacing(10)
+        for col, stretch in enumerate(self.column_stretches):
+            section_layout.setColumnStretch(col, stretch)
+
+        for param_row, (param_name, value) in enumerate(sorted(self.unknown_params)):
+            name_label = QLabel(param_name)
+            name_label.setStyleSheet("font-weight: bold; font-family: monospace; color: black;")
+            section_layout.addWidget(name_label, param_row, 0)
+
+            value_label = QLabel(str(value))
+            value_label.setStyleSheet(
+                "font-family: monospace; color: black; background-color: white; "
+                "padding: 2px; border: 1px solid #ccc;"
+            )
+            value_label.setFixedWidth(300)
+            section_layout.addWidget(value_label, param_row, 1)
+
+            tooltip = (f"'{param_name}' isn't in this app's parameter schema - could be a typo, "
+                       f"or a parameter the schema doesn't cover yet. Preserved as-is on Save.")
+            name_label.setToolTip(tooltip)
+            value_label.setToolTip(tooltip)
+            self.static_param_errors[param_name] = tooltip
+
+        self.grid_layout.addWidget(section_container, row, 0, 1, 3)
+        row += 1
+        return row
+
+    def _connect_cross_param_rules(self):
+        """Wire up live re-validation: whenever a widget involved in a documented
+        cross-parameter rule (see CFXValidator.CROSS_PARAM_RULE_GROUPS) changes, re-check
+        that rule and restyle the affected fields - without needing a full grid rebuild."""
+        for group in CFXValidator.CROSS_PARAM_RULE_GROUPS:
+            for param_name in group:
+                if param_name not in self.param_widgets:
+                    continue
+                widget, _display_type = self.param_widgets[param_name]
+                self._connect_change_signal(widget, self._revalidate)
+
+    def _connect_change_signal(self, widget, slot):
+        """Connect the appropriate 'value changed' signal for whatever widget type this is."""
+        if isinstance(widget, (QSpinBox, QDoubleSpinBox)):
+            widget.valueChanged.connect(slot)
+        elif isinstance(widget, QComboBox):
+            widget.currentIndexChanged.connect(slot)
+        elif isinstance(widget, QCheckBox):
+            widget.stateChanged.connect(slot)
+        elif isinstance(widget, QLineEdit):
+            widget.textChanged.connect(slot)
+        elif isinstance(widget, tuple):
+            for sub_widget in widget:
+                if hasattr(sub_widget, 'valueChanged'):
+                    sub_widget.valueChanged.connect(slot)
+
+    def _revalidate(self, *_args):
+        """Recompute cross-parameter rule violations against the live widget values, merge
+        them with the static (structural/range) errors found when the grid was built, and
+        restyle every affected field and category banner accordingly."""
+        cross_errors = CFXValidator.check_cross_parameter_rules(self.get_current_settings())
+        self.param_errors = {**self.static_param_errors, **cross_errors}
+
+        for param_name, containers in self.param_containers.items():
+            self._style_containers(param_name, containers)
+
+        for category in self.category_header_layouts:
+            self._update_category_error_banner(category)
+
+    def _style_containers(self, param_name, containers):
+        """Apply the error/shared/normal background+tooltip to a param's name and value
+        containers. Red wins over yellow: a param that's both invalid and shared with other
+        soundfonts is still something that needs fixing first."""
+        if param_name in self.param_errors:
+            style = f"background-color: {ERROR_PARAM_COLOR};"
+            tooltip = self.param_errors[param_name]
+        elif param_name in self.shared_parameters and self.shared_with:
+            style = f"background-color: {SHARED_PARAM_COLOR};"
+            tooltip = "This value is shared with other soundfonts using the same profile"
+        else:
+            style = ""
+            tooltip = ""
+
+        for container in containers:
+            container.setStyleSheet(style)
+            container.setToolTip(tooltip)
+
+        # A tooltip set on the row container only shows over its own empty margin - the
+        # actual spinner/dropdown/checkbox on top of it needs its own tooltip too, or
+        # hovering the control itself (the natural thing to do) shows nothing.
+        self._apply_tooltip(self.param_control_widgets.get(param_name), tooltip)
+
+    def _apply_tooltip(self, widget, tooltip):
+        if widget is None:
+            return
+        if isinstance(widget, (tuple, list)):
+            for sub_widget in widget:
+                self._apply_tooltip(sub_widget, tooltip)
+        elif isinstance(widget, dict):
+            for sub_widget in widget.values():
+                self._apply_tooltip(sub_widget, tooltip)
+        elif hasattr(widget, 'setToolTip'):
+            widget.setToolTip(tooltip)
+
+    def _update_category_error_banner(self, category):
+        """Show/hide the 'this category has invalid parameters' banner for one category,
+        based on the current self.param_errors. Mirrors the shared-parameters banner, which
+        doesn't need this treatment since shared_parameters is known before the grid is built."""
+        header_layout = self.category_header_layouts.get(category)
+        if header_layout is None:
+            return
+
+        params = self.category_params.get(category, [])
+        has_error = any(name in self.param_errors for name, _ in params)
+        existing_label = self.category_error_banner_labels.get(category)
+
+        if has_error and existing_label is None:
+            warning_label = QLabel("Highlighted parameters failed validation - hover for details")
+            warning_label.setStyleSheet(f"""
+                color: {ERROR_PARAM_TEXT_COLOR};
+                font-style: italic;
+                font-weight: bold;
+                padding-left: 20px;
+            """)
+            # Insert before the trailing stretch so it stays grouped with the category name
+            header_layout.insertWidget(header_layout.count() - 1, warning_label)
+            self.category_error_banner_labels[category] = warning_label
+        elif not has_error and existing_label is not None:
+            existing_label.setParent(None)
+            existing_label.deleteLater()
+            del self.category_error_banner_labels[category]
+
+    def _mismatch_message(self, param_name, display_type, value):
+        """Build the static-error message for a value that couldn't be loaded into its widget."""
+        if param_name in DYNAMIC_FOLDER_DROPDOWN_PARAMS:
+            return (f"Points to profile {value}, which wasn't found among this SD card's "
+                    f"indexed resource folders for {param_name} - either the card wasn't "
+                    f"loaded, or that folder is missing. Left out of Save.")
+        return (f"Stored value '{value}' doesn't match this parameter's declared type "
+                f"('{display_type}') - left out of Save so it won't be overwritten with "
+                f"something wrong")
+
+    def _lookup_param_def(self, param_name: str) -> Optional[dict]:
+        """Resolve a parameter's schema entry, falling back to a matching '<prefix><n>'
+        template (see INDEXED_PARAM_NAME_RE) when there's no literal entry for this specific
+        numbered name. Returns None if neither is found."""
+        param_def = self.param_definitions.get(param_name)
+        if param_def is not None:
+            return param_def
+        match = INDEXED_PARAM_NAME_RE.match(param_name)
+        if match:
+            return self.param_definitions.get(match.group(1) + '<n>')
+        return None
+
     def load_parameter_definitions(self):
         """Load parameter definitions from JSON file."""
         try:
@@ -566,8 +802,23 @@ class SettingsGrid(QWidget):
             self.param_definitions = {}
                         
     def get_current_settings(self) -> dict:
-        """Return current settings."""
-        return self.current_settings.copy()
+        """Return current settings, reading live values out of the input widgets.
+        Falls back to the last-loaded value for any param whose widget couldn't be built."""
+        result = self.current_settings.copy()
+        for param_name, (widget, display_type) in self.param_widgets.items():
+            value = get_widget_value(widget, display_type)
+            if value is not None:
+                result[param_name] = value
+        return result
+
+    def get_settings_split(self) -> dict:
+        """Split current settings by which file they belong to, using the provenance
+        recorded when they were loaded. Returns {'font': {...}, 'blade': {...}, 'color': {...}, 'global': {...}}."""
+        split = {'font': {}, 'blade': {}, 'color': {}, 'global': {}}
+        for param_name, value in self.get_current_settings().items():
+            source = self.param_sources.get(param_name, 'font')
+            split.setdefault(source, {})[param_name] = value
+        return split
 
     def scroll_to_category(self, category: str):
         """Scroll to make the selected category visible"""

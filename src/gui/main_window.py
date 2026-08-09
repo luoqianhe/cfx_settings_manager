@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from gui.widgets.settings_grid import SettingsGrid
+from gui.widgets.blade_preview import BladePreviewWidget
+from gui.validation_report_dialog import ValidationReportDialog
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
@@ -28,6 +30,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.file_handler = None
         self.color_profiles = {}
         self.grafx_profiles = {}
+        self.accents_profiles = {}
+        self.pixies_profiles = {}
         self.setWindowTitle("CFX Settings Manager")
         self.setMinimumSize(1024, 768)
         self.resize(1175, 900)
@@ -85,7 +89,24 @@ class MainWindow(QtWidgets.QMainWindow):
         """)
         select_folder_button.clicked.connect(self.prompt_for_folder)
         left_layout.addWidget(select_folder_button)
-        
+
+        # Validate All button
+        validate_all_button = QtWidgets.QPushButton("Validate All Soundfonts")
+        validate_all_button.setStyleSheet("""
+            QPushButton {
+                background-color: #6c757d;
+                color: white;
+                padding: 6px;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #565e64;
+            }
+        """)
+        validate_all_button.clicked.connect(self.validate_all_fonts)
+        left_layout.addWidget(validate_all_button)
+
         # Soundfont header
         header_label = QtWidgets.QLabel("Soundfont Folders")
         header_label.setStyleSheet("""
@@ -104,8 +125,54 @@ class MainWindow(QtWidgets.QMainWindow):
         self.font_list = QtWidgets.QListWidget()
         self.font_list.setFixedWidth(250)  # Match header width
         self.font_list.itemClicked.connect(self.on_font_selected)
-        left_layout.addWidget(self.font_list)
-        
+        left_layout.addWidget(self.font_list, stretch=1)
+
+        # Blade preview
+        preview_header = QtWidgets.QLabel("Blade Preview (approximate)")
+        preview_header.setStyleSheet("""
+            font-weight: bold;
+            font-size: 14px;
+            padding: 4px;
+            background-color: #f0f0f0;
+            border: 1px solid #ddd;
+        """)
+        preview_header.setMinimumHeight(30)
+        preview_header.setAlignment(Qt.AlignCenter)
+        preview_header.setFixedWidth(250)
+        left_layout.addWidget(preview_header)
+
+        self.blade_preview = BladePreviewWidget()
+        left_layout.addWidget(self.blade_preview)
+
+        preview_controls = QtWidgets.QWidget()
+        preview_controls_layout = QtWidgets.QHBoxLayout(preview_controls)
+        preview_controls_layout.setContentsMargins(0, 4, 0, 0)
+
+        ignite_button = QtWidgets.QPushButton("Ignite")
+        ignite_button.clicked.connect(self.blade_preview.ignite)
+        retract_button = QtWidgets.QPushButton("Retract")
+        retract_button.clicked.connect(self.blade_preview.retract)
+
+        preview_controls_layout.addWidget(ignite_button)
+        preview_controls_layout.addWidget(retract_button)
+        left_layout.addWidget(preview_controls)
+
+        reaction_controls = QtWidgets.QWidget()
+        reaction_controls_layout = QtWidgets.QHBoxLayout(reaction_controls)
+        reaction_controls_layout.setContentsMargins(0, 4, 0, 0)
+
+        clash_button = QtWidgets.QPushButton("Clash")
+        clash_button.clicked.connect(self.blade_preview.clash)
+        lockup_button = QtWidgets.QPushButton("Lockup")
+        lockup_button.setCheckable(True)
+        lockup_button.clicked.connect(
+            lambda: lockup_button.setChecked(self.blade_preview.toggle_lockup())
+        )
+
+        reaction_controls_layout.addWidget(clash_button)
+        reaction_controls_layout.addWidget(lockup_button)
+        left_layout.addWidget(reaction_controls)
+
         layout.addWidget(left_container, stretch=1)
         
         # Right side container
@@ -132,6 +199,23 @@ class MainWindow(QtWidgets.QMainWindow):
         dropdown_layout.addWidget(dropdown_label)
         dropdown_layout.addWidget(self.category_dropdown)
         dropdown_layout.addStretch()
+
+        # Save button
+        save_button = QtWidgets.QPushButton("Save Changes")
+        save_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4A90E2;
+                color: white;
+                padding: 6px 16px;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #357ABD;
+            }
+        """)
+        save_button.clicked.connect(self.save_changes)
+        dropdown_layout.addWidget(save_button)
 
         # Header row with expandable columns
         header_row = QtWidgets.QWidget()
@@ -313,7 +397,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         item_font_name = '-'.join(item_font_path.name.split('-')[1:])
                         
                         if item_font_name in shared_fonts:
-                            list_item.setBackground(QtGui.QColor(255, 220, 220))  # Light red
+                            list_item.setBackground(QtGui.QColor(255, 243, 176))  # Light yellow - matches the "shared" color used in the settings grid
                             print(f"Highlighted font: {item_font_name}")
                     except Exception as e:
                         print(f"Error parsing font name for highlighting: {e}")
@@ -326,13 +410,14 @@ class MainWindow(QtWidgets.QMainWindow):
                 if blade_profile:
                     print(f"Loaded profile {effective_profile} with {len(blade_profile)} parameters")
                     blade_settings = blade_profile
-                    
+
                     # If this font shares its profile with other fonts, all blade profile parameters are shared
                     if shared_fonts:
                         shared_parameters.update(blade_settings.keys())
                         print(f"Shared parameters: {len(shared_parameters)}")
                 else:
                     print(f"Failed to load blade profile {effective_profile}")
+            color_settings = {}
             
             # Handle color profile similarly to blade profile
             color_num = settings.get('start_color')
@@ -356,16 +441,77 @@ class MainWindow(QtWidgets.QMainWindow):
                 color_profile = self.file_handler.load_color_profile(color_num_int)
                 if color_profile:
                     print(f"Loaded color {effective_color} with {len(color_profile)} parameters")
-                    blade_settings.update(color_profile)
+                    color_settings = color_profile
                 else:
                     print(f"Failed to load color profile {effective_color}")
-            
-            # Combine all settings
-            all_settings = settings.copy()
+
+            # Feed the blade preview widget. It only uses a handful of clearly-documented
+            # parameters (color, qon/qoff, flkon/flkoff, style_pon/style_poff, unstable,
+            # fcolor/lcolor) - see blade_preview.py for what's approximated vs. skipped.
+            from core.color_utils import rgbw_to_rgb
+
+            def parse_rgbw(color_str, default=(200, 200, 200)):
+                try:
+                    r, g, b, w = map(int, color_str.split(','))
+                    return rgbw_to_rgb(r, g, b, w)
+                except (ValueError, AttributeError):
+                    return default
+
+            rgb = parse_rgbw(color_settings.get('color'))
+            foc_rgb = parse_rgbw(color_settings.get('fcolor'), default=(255, 255, 255))
+            lockup_rgb = parse_rgbw(color_settings.get('lcolor'), default=(255, 140, 0))
+            try:
+                qon_ms = int(settings.get('qon', 300))
+            except ValueError:
+                qon_ms = 300
+            try:
+                qoff_ms = int(settings.get('qoff', 300))
+            except ValueError:
+                qoff_ms = 300
+            flicker_on = blade_settings.get('flkon') == '1'
+            flicker_off = blade_settings.get('flkoff') == '1'
+            self.blade_preview.set_profile(
+                rgb, qon_ms, qoff_ms, flicker_on, flicker_off,
+                foc_rgb=foc_rgb, lockup_rgb=lockup_rgb,
+                pon_style_id=blade_settings.get('style_pon'),
+                poff_style_id=blade_settings.get('style_poff'),
+                unstable_id=blade_settings.get('unstable'),
+            )
+            self.blade_preview.reset()
+
+            # Global parameters live in the header of config.txt, above any [profile=] section.
+            # They apply to every soundfont on the card, not just the one selected here.
+            global_settings = self.file_handler.load_master_config()
+            print(f"Loaded {len(global_settings)} global config parameters")
+
+            # Combine all settings for display, but remember which file each one came
+            # from (font_config.txt / config.txt profile / colors.txt / config.txt header)
+            # so Save can route them back correctly.
+            #
+            # Merge order matters when a name collides across scopes (e.g. omnisabers exists
+            # both as a global config.txt parameter and inside every blade profile). The CFX
+            # manual's documented SD card parsing order is: config.txt (global header, then
+            # blade profiles) -> colors.txt -> font_config.txt, each later file/section able to
+            # override same-named values from before it. So the most general scope goes first
+            # here and gets overridden by anything more specific, ending with font_config.txt.
+            all_settings = global_settings.copy()
             all_settings.update(blade_settings)
-            
+            all_settings.update(color_settings)
+            all_settings.update(settings)
+
+            param_sources = {}
+            param_sources.update({name: 'global' for name in global_settings})
+            param_sources.update({name: 'blade' for name in blade_settings})
+            param_sources.update({name: 'color' for name in color_settings})
+            param_sources.update({name: 'font' for name in settings})
+
             # Update UI with shared parameter information
-            self.settings_grid.update_settings(all_settings, shared_with=shared_fonts, shared_parameters=shared_parameters)
+            self.settings_grid.update_settings(
+                all_settings,
+                shared_with=shared_fonts,
+                shared_parameters=shared_parameters,
+                param_sources=param_sources
+            )
                         
         except Exception as e:
             print(f"Error loading settings: {e}")
@@ -414,7 +560,15 @@ class MainWindow(QtWidgets.QMainWindow):
                         except (ValueError, IndexError):
                             continue
             print(f"Loaded {len(self.grafx_profiles)} GraFx profiles")
-            
+
+            # Load Accent LED and Pixel Accent (Pixies) profiles - same indexed-folder
+            # linking scheme as GraFx, referenced by style_accents / style_pixies
+            from core.color_utils import load_accents_profiles, load_pixies_profiles
+            self.accents_profiles = load_accents_profiles(self.folder_path)
+            self.pixies_profiles = load_pixies_profiles(self.folder_path)
+            print(f"Loaded {len(self.accents_profiles)} Accent profiles, "
+                  f"{len(self.pixies_profiles)} Pixies profiles")
+
             # Clear and populate font list
             self.font_list.clear()
             for font_num, font_name, font_path in self.file_handler.load_font_folders():
@@ -429,45 +583,250 @@ class MainWindow(QtWidgets.QMainWindow):
                 "Error",
                 f"Failed to load CFX folder: {str(e)}"
             )
-        
+
+    def _resolve_effective_profile_and_color(self, settings, font_num, prefs):
+        """Given a font's raw font_config.txt settings, resolve which blade profile and
+        color profile it actually uses, accounting for the -1 -> prefs.txt fallback that
+        on_font_selected also implements. Returns (effective_profile, effective_color) as
+        strings (still needing int()), or None for whichever couldn't be resolved."""
+        prefs_font_index = font_num - 1 if font_num > 0 else 0
+        font_prefs = prefs.get(prefs_font_index, {})
+
+        profile_num = settings.get('start_blade')
+        if profile_num == '-1':
+            effective_profile = font_prefs.get('profile')
+        else:
+            effective_profile = profile_num
+
+        color_num = settings.get('start_color')
+        if color_num == '-1':
+            effective_color = font_prefs.get('color')
+        else:
+            effective_color = color_num
+
+        return effective_profile, effective_color
+
+    def validate_all_fonts(self):
+        """Walk every soundfont on the loaded card and report anything wrong: the same
+        parameter-level checks the settings grid highlights red for whichever font is
+        currently selected, run across every font, plus config.txt/colors.txt structural
+        errors (duplicate profile/color numbers) and blade/color profiles nothing uses."""
+        if not self.file_handler or not self.folder_path:
+            QtWidgets.QMessageBox.warning(
+                self, "No Folder Loaded", "Select a CFX root folder first."
+            )
+            return
+
+        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+        try:
+            report = self._run_full_validation()
+        finally:
+            QtWidgets.QApplication.restoreOverrideCursor()
+
+        dialog = ValidationReportDialog(report, self)
+        dialog.jump_to_font.connect(self._jump_to_font)
+        dialog.exec()
+
+    def _run_full_validation(self):
+        report = {
+            'structural_errors': [],
+            'global_errors': {},
+            'font_reports': [],
+            'orphaned_profiles': [],
+            'orphaned_colors': [],
+            'font_count': 0,
+        }
+
+        _, config_errors, profiles_by_num = CFXValidator.validate_config_file(
+            self.folder_path / "config.txt"
+        )
+        report['structural_errors'].extend(f"config.txt: {e}" for e in config_errors)
+        all_profile_numbers = set(profiles_by_num.keys())
+
+        _, color_errors, colors_by_num = CFXValidator.validate_colors_file(
+            self.folder_path / "colors.txt"
+        )
+        report['structural_errors'].extend(f"colors.txt: {e}" for e in color_errors)
+        all_color_numbers = set(colors_by_num.keys())
+
+        prefs = self.file_handler.load_preferences()
+        referenced_profiles = set()
+        referenced_colors = set()
+        font_folders = self.file_handler.load_font_folders()
+        report['font_count'] = len(font_folders)
+
+        for font_num, font_name, font_path in font_folders:
+            settings = self.file_handler.load_font_config(font_path)
+            if not settings:
+                report['font_reports'].append({
+                    'font_num': font_num, 'font_name': font_name, 'font_path': font_path,
+                    'errors': {'(font_config.txt)': 'Missing or empty font_config.txt'},
+                })
+                continue
+
+            effective_profile, effective_color = self._resolve_effective_profile_and_color(
+                settings, font_num, prefs
+            )
+
+            blade_settings = {}
+            font_errors = {}
+            if effective_profile is not None and str(effective_profile) != '-1':
+                try:
+                    profile_num_int = int(effective_profile)
+                    referenced_profiles.add(profile_num_int)
+                    blade_settings = self.file_handler.load_blade_profile(profile_num_int) or {}
+                    if not blade_settings:
+                        font_errors['start_blade'] = (
+                            f"Points to blade profile {profile_num_int}, which isn't "
+                            f"defined in config.txt"
+                        )
+                except ValueError:
+                    font_errors['start_blade'] = f"'{effective_profile}' isn't a valid profile number"
+            elif effective_profile is None:
+                font_errors['start_blade'] = (
+                    "start_blade=-1 but no matching profile is set in prefs.txt"
+                )
+
+            color_settings = {}
+            if effective_color is not None and str(effective_color) != '-1':
+                try:
+                    color_num_int = int(effective_color)
+                    referenced_colors.add(color_num_int)
+                    color_settings = self.file_handler.load_color_profile(color_num_int) or {}
+                    if not color_settings:
+                        font_errors['start_color'] = (
+                            f"Points to color profile {color_num_int}, which isn't "
+                            f"defined in colors.txt"
+                        )
+                except ValueError:
+                    font_errors['start_color'] = f"'{effective_color}' isn't a valid color number"
+            elif effective_color is None:
+                font_errors['start_color'] = (
+                    "start_color=-1 but no matching color is set in prefs.txt"
+                )
+
+            global_settings = self.file_handler.load_master_config()
+
+            # Same precedence as on_font_selected: global -> blade -> color -> font_config.txt,
+            # matching the manual's documented parsing order (most specific wins).
+            all_settings = global_settings.copy()
+            all_settings.update(blade_settings)
+            all_settings.update(color_settings)
+            all_settings.update(settings)
+
+            param_sources = {}
+            param_sources.update({n: 'global' for n in global_settings})
+            param_sources.update({n: 'blade' for n in blade_settings})
+            param_sources.update({n: 'color' for n in color_settings})
+            param_sources.update({n: 'font' for n in settings})
+
+            # Reuse the exact same widget-based validation the interactive grid uses, on a
+            # throwaway (never-shown) grid, so this can't drift from what the UI highlights.
+            grid = SettingsGrid("", main_window=self)
+            grid.update_settings(all_settings, param_sources=param_sources)
+
+            # Global (config.txt header) parameters apply to every font on the card, so an
+            # error there isn't really "this font's problem" - it's the same one issue,
+            # reported once here instead of once per font that happens to inherit it.
+            for name, msg in grid.param_errors.items():
+                if param_sources.get(name) == 'global':
+                    report['global_errors'][name] = msg
+                else:
+                    font_errors[name] = msg
+            grid.deleteLater()
+
+            if font_errors:
+                report['font_reports'].append({
+                    'font_num': font_num, 'font_name': font_name, 'font_path': font_path,
+                    'errors': font_errors,
+                })
+
+        report['orphaned_profiles'] = sorted(all_profile_numbers - referenced_profiles)
+        report['orphaned_colors'] = sorted(all_color_numbers - referenced_colors)
+
+        return report
+
+    def _jump_to_font(self, font_path_str):
+        """Select the given font in the list and load it, e.g. from the validation report."""
+        for i in range(self.font_list.count()):
+            item = self.font_list.item(i)
+            if item.data(QtCore.Qt.UserRole) == font_path_str:
+                self.font_list.setCurrentItem(item)
+                self.on_font_selected(item)
+                return
+
     def save_changes(self):
         try:
             # Get current font
             current_item = self.font_list.currentItem()
             if not current_item:
                 raise Exception("No font selected")
-                
+
+            # Get current settings from the UI, split by which file they belong to
+            settings_by_source = self.settings_grid.get_settings_split()
+            font_settings = settings_by_source['font']
+            blade_settings = settings_by_source['blade']
+            color_settings = settings_by_source['color']
+            global_settings = settings_by_source['global']
+
+            message = "Are you sure you want to save these changes?"
+            if global_settings:
+                message += ("\n\nThis includes global device settings, which affect "
+                             "every soundfont on the card, not just this one.")
+
+            param_errors = self.settings_grid.param_errors
+            if param_errors:
+                shown = list(param_errors.items())[:10]
+                error_lines = "\n".join(f"  - {name}: {msg}" for name, msg in shown)
+                if len(param_errors) > len(shown):
+                    error_lines += f"\n  ...and {len(param_errors) - len(shown)} more"
+                message += (
+                    f"\n\n{len(param_errors)} parameter(s) are highlighted red and failed "
+                    f"validation:\n{error_lines}\n\nSave anyway?"
+                )
+
             response = QtWidgets.QMessageBox.question(
                 self,
                 "Save Changes",
-                "Are you sure you want to save these changes?",
+                message,
                 QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
             )
-            
+
             if response == QtWidgets.QMessageBox.Yes:
                 font_path = Path(current_item.data(QtCore.Qt.UserRole))
-                
-                # Get current settings from the UI
-                current_settings = self.get_current_settings()
-                
+
                 # Save font configuration
-                if not self.file_handler.save_font_config(font_path, current_settings):
+                if not self.file_handler.save_font_config(font_path, font_settings):
                     raise Exception("Failed to save font configuration")
-                
-                # If we have a blade profile, save it
-                if 'start_blade' in current_settings:
-                    profile_num = int(current_settings['start_blade'])
+
+                # If we have a blade profile, save it. Merge onto a fresh reload of the
+                # profile rather than replacing it outright, so any key not represented by
+                # a live widget (missing schema entry, or a name that collides with a
+                # global-scope param of the same name, e.g. 'omnisabers') isn't dropped.
+                if blade_settings and 'start_blade' in font_settings:
+                    profile_num = int(font_settings['start_blade'])
                     if profile_num >= 0:  # Only save if it's a valid profile number
-                        if not self.file_handler.save_blade_profile(profile_num, current_settings):
+                        existing_blade = self.file_handler.load_blade_profile(profile_num) or {}
+                        existing_blade.update(blade_settings)
+                        if not self.file_handler.save_blade_profile(profile_num, existing_blade):
                             raise Exception(f"Failed to save blade profile {profile_num}")
-                
-                # If we have a color profile, save it
-                if 'start_color' in current_settings:
-                    color_num = int(current_settings['start_color'])
+
+                # If we have a color profile, save it (same merge-onto-existing approach)
+                if color_settings and 'start_color' in font_settings:
+                    color_num = int(font_settings['start_color'])
                     if color_num >= 0:  # Only save if it's a valid color number
-                        if not self.file_handler.save_color_profile(color_num, current_settings):
+                        existing_color = self.file_handler.load_color_profile(color_num) or {}
+                        existing_color.update(color_settings)
+                        if not self.file_handler.save_color_profile(color_num, existing_color):
                             raise Exception(f"Failed to save color profile {color_num}")
-                
+
+                # Global settings apply to every soundfont on the card
+                if global_settings:
+                    existing_global = self.file_handler.load_master_config() or {}
+                    existing_global.update(global_settings)
+                    if not self.file_handler.save_master_config(existing_global):
+                        raise Exception("Failed to save global configuration")
+
                 QtWidgets.QMessageBox.information(
                     self,
                     "Success",

@@ -1,0 +1,2013 @@
+{
+  "TypeConfig": "BladeProfileConfig",
+  "CfxProperties": [
+    {
+      "Name": "twon",
+      "FriendlyName": "Twist on (poweron)",
+      "Category": "Activation & De‑activation Gestures",
+      "SubCategory": "Ignition Gestures",
+      "Type": "int_bianglerange",
+      "MinValue": -2000,
+      "MaxValue": 2000,
+      "ExampleValue": "500,-90,90",
+      "Description": "twiston threshold followed by angular range (2 values [-90;90]) in which the twiston effect can be executed",
+      "Simple": 1
+    },
+    {
+      "Name": "twoff",
+      "FriendlyName": "twist off (poweroff)",
+      "Category": "Activation & De‑activation Gestures",
+      "SubCategory": "Retraction Gestures",
+      "Type": "int_bianglerange",
+      "MinValue": -2000,
+      "MaxValue": 2000,
+      "ExampleValue": "-500,-90,90",
+      "Description": "twistoff threshold followed by angular range (2 values [-90;90]) in which the twiston effect can be executed",
+      "Simple": 1
+    },
+    {
+      "Name": "wagon",
+      "FriendlyName": "double twist on (poweron)",
+      "Category": "Activation & De‑activation Gestures",
+      "SubCategory": "Ignition Gestures",
+      "Type": "int_bianglerange",
+      "MinValue": -2000,
+      "MaxValue": 2000,
+      "ExampleValue": "-500,-90,90",
+      "Description": "sets the double-twist on threshold",
+      "Simple": 1
+    },
+    {
+      "Name": "wagoff",
+      "FriendlyName": "double twist on (poweroff)",
+      "Category": "Activation & De‑activation Gestures",
+      "SubCategory": "Retraction Gestures",
+      "Type": "int_bianglerange",
+      "MinValue": -2000,
+      "MaxValue": 2000,
+      "ExampleValue": "500,-90,90",
+      "Description": "sets the double-twist off threshold",
+      "Simple": 1
+    },
+    {
+      "Name": "swon",
+      "FriendlyName": "Swing on (poweron)",
+      "Category": "Activation & De‑activation Gestures",
+      "SubCategory": "Ignition Gestures",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 2000,
+      "ExampleValue": "500",
+      "Description": "Swing on threshold",
+      "Simple": 0
+    },
+    {
+      "Name": "pof",
+      "FriendlyName": "Power on Force",
+      "Category": "Activation & De‑activation Gestures",
+      "SubCategory": "Ignition Gestures",
+      "Type": "int_bianglerange",
+      "MinValue": 0,
+      "MaxValue": 2000,
+      "ExampleValue": "400, -90,90",
+      "Description": "Power on Force threshold followed by angular range (2 values [-90;90]) in which the Power on Force effect can be executed. enables the Power on Force saber ignition technique (see paragraph 'Motion activated ignition' for more detail). The parameter defines the motion threshold required to ignite the blade with a motion faking the use of the 'Force' to activate the saber. 350-500 works usually fine.",
+      "Simple": 0
+    },
+    {
+      "Name": "blastm",
+      "FriendlyName": "Blaster Move",
+      "Category": "Activation & De‑activation Gestures",
+      "SubCategory": "Interactive Motions",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "Enables Blaster Move. Blaster Move allows the ability to trigger a sequence of blaster sounds with the motion of the hilt. Only the first sound is triggered by a short press on the aux. switch, then further �swing-like� gestures will trigger more blaster sounds, until a blaster sound ends, or if a clash interrupts the sequences (assuming blastp=0).",
+      "Simple": 0
+    },
+    {
+      "Name": "blastp",
+      "FriendlyName": "Blaster priority",
+      "Category": "Audio Playback & Priorities",
+      "SubCategory": "Blaster / Clash Priority",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "defines if the blaster priority is enabled or not. This decides if a clash can interrupt the blaster blocking sounds. Swings are always disabled during blasters. With the blaster priority on, the sound of the blaster must finish first then a swing might be executed. This allows a nice choreography for blocking blaster rays using a long blaster file without getting the sound stopped by a swing. If the choreography has stressed movements that might trigger a clash, set the parameter to 1 so that no gestural events can interrupt the blaster sequence. Conversely, if you wish a blaster sequence to be possibly interrupted by a clash, disable the parameter",
+      "Simple": 0
+    },
+    {
+      "Name": "random",
+      "FriendlyName": "Sound selection mode",
+      "Category": "Audio Playback & Priorities",
+      "SubCategory": "Randomisation / Sequencing",
+      "Type": "tribool",
+      "MinValue": 0,
+      "MaxValue": 2,
+      "ExampleValue": "2",
+      "Description": "set the selection mode for picking the clash, swing, spin and stab sounds.",
+      "Simple": 0,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Random play",
+          "Description": "the sound is randomly chosen in the available slots."
+        },
+        {
+          "Index": 1,
+          "Option": "In sequence",
+          "Description": "the sound is played in sequence. (slot 1, then 2 etc.)"
+        },
+        {
+          "Index": 2,
+          "Option": "No recurring",
+          "Description": "the sound is randomly chosen without triggering the same sound twice in a row."
+        }
+      ]
+    },
+    {
+      "Name": "pom",
+      "FriendlyName": "Power-on sound selection mode",
+      "Category": "Audio Playback & Priorities",
+      "SubCategory": "Randomisation / Sequencing",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3,
+      "ExampleValue": "3",
+      "Description": "When set to 0, board will use current angle of the hilt to choose the power on sound played when saber is ignited by a motion; mode 1 as well but with the poweronf(orce) special sound played when initiating a force triggered (vertical shake) ignition (aka PoF). Mode 2 is random power on + special PoF sound, mode 3 is random at all times.",
+      "Simple": 0,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "By angle",
+          "Description": "board will use current angle of the hilt to choose the power on sound played when saber is ignited by a motion."
+        },
+        {
+          "Index": 1,
+          "Option": "By angle with Force",
+          "Description": "Same as 'By angle', but with the poweronf(orce) special sound played when initiating a force triggered (vertical shake) ignition (aka PoF)"
+        },
+        {
+          "Index": 2,
+          "Option": "Random with Force",
+          "Description": "random power on + special PoF sound."
+        },
+        {
+          "Index": 3,
+          "Option": "Random",
+          "Description": "random at all times."
+        }
+      ]
+    },
+    {
+      "Name": "randb",
+      "FriendlyName": "Blaster blocking sound selection mode",
+      "Category": "Audio Playback & Priorities",
+      "SubCategory": "Randomisation / Sequencing",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 2,
+      "ExampleValue": "2",
+      "Description": "set the selection mode for picking the Blaster blocking sounds.",
+      "Simple": 0,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Random play",
+          "Description": "the sound is randomly chosen in the available slots."
+        },
+        {
+          "Index": 1,
+          "Option": "In sequence",
+          "Description": "the sound is played in sequence. (slot 1, then 2 etc.)"
+        },
+        {
+          "Index": 2,
+          "Option": "No recurring",
+          "Description": "the sound is randomly chosen without triggering the same sound twice in a row."
+        }
+      ]
+    },
+    {
+      "Name": "focb",
+      "FriendlyName": "Flash on Clash: enabled during Blaster Blocking",
+      "Category": "Battle Fx",
+      "SubCategory": "Blaster",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "1",
+      "Description": "defines if the Flash on Clash is enabled during Blaster Blocking effect",
+      "Simple": 0
+    },
+    {
+      "Name": "style_blaster",
+      "FriendlyName": "Bolt impact look and feel",
+      "Category": "Battle Fx",
+      "SubCategory": "Blaster",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 8,
+      "ExampleValue": "0",
+      "Description": "Bolt impact look and feel",
+      "Simple": 1,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Disable rendering",
+          "Description": ""
+        },
+        {
+          "Index": 1,
+          "Option": "Legacy impact",
+          "Description": "flash generated by the blade object"
+        },
+        {
+          "Index": 2,
+          "Option": "Fading bolt",
+          "Description": "fading bolt with adjustable edges (CFX, Prizm & CS legacy)"
+        },
+        {
+          "Index": 3,
+          "Option": "Splitting waves",
+          "Description": "Two energy waves split apart from impact location"
+        },
+        {
+          "Index": 4,
+          "Option": "Splitting waves variant with tailing",
+          "Description": "splitting waves variant with tailing"
+        },
+        {
+          "Index": 5,
+          "Option": "Splitting waves combined with an impact flare",
+          "Description": "splitting waves combined with an impact flare"
+        },
+        {
+          "Index": 6,
+          "Option": "Splitting waves (with tailing) combined with an impact flare",
+          "Description": "splitting waves (with tailing) combined with an impact flare"
+        },
+        {
+          "Index": 7,
+          "Option": "Energy",
+          "Description": "with a gradient of energy spreadin"
+        },
+        {
+          "Index": 8,
+          "Option": "Expandable",
+          "Description": "with a gradient of energy spreading and flaring at the bolt center"
+        }
+      ]
+    },
+    {
+      "Name": "sbolt",
+      "FriendlyName": "Size of bolt impact",
+      "Category": "Battle Fx",
+      "SubCategory": "Blaster",
+      "Type": "birange",
+      "MinValue": 0,
+      "MaxValue": 178,
+      "ExampleValue": "20",
+      "Description": "list of 2 numbers, minimum and maximum size of the bolt impact. When set to 0,0 and in ledstrip mode, the bolt will make the whole blade to flash (legacy Flash on Clash)",
+      "Simple": 1
+    },
+    {
+      "Name": "dbolt",
+      "FriendlyName": "Duration of bolt impact",
+      "Category": "Battle Fx",
+      "SubCategory": "Blaster",
+      "Type": "birange",
+      "MinValue": 0,
+      "MaxValue": 3000,
+      "ExampleValue": "50,200",
+      "Description": "min and max of Bolt duration",
+      "Simple": 1
+    },
+    {
+      "Name": "lbolt",
+      "FriendlyName": "Location of bolt impact",
+      "Category": "Battle Fx",
+      "SubCategory": "Blaster",
+      "Type": "birange",
+      "MinValue": 0,
+      "MaxValue": 279,
+      "ExampleValue": "15,30",
+      "Description": "impact location restriction on the blade. In the example above, {15,30} forces the bolt to be at 15 pixel minimum from the bottom of the blade and 30 pixels away from the top of the blade.",
+      "Simple": 0
+    },
+    {
+      "Name": "fbolt",
+      "FriendlyName": "bolt impact energy distribution",
+      "Category": "Battle Fx",
+      "SubCategory": "Blaster",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "40",
+      "Description": "bolt impact energy distribution and edge fading / blending (in %). 100% will generate a solid flash all over the picked up size. 1% will have the center of the impact at the maximum brightness which will fade progressively down to 1% as you move to the edges of the impact.",
+      "Simple": 0
+    },
+    {
+      "Name": "rbolt",
+      "FriendlyName": "Bolt color randomization",
+      "Category": "Battle Fx",
+      "SubCategory": "Blaster",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "10",
+      "Description": "Bolt impact color randomization (in %). Provides some variance on the bolt color from impact to impact. Affect separately each RGB component in order to really alter the hue and not just brightness.",
+      "Simple": 0
+    },
+    {
+      "Name": "qbolt",
+      "FriendlyName": "Bolt impact speed",
+      "Category": "Battle Fx",
+      "SubCategory": "Blaster",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "50",
+      "Description": "Bolt impact speed (in %). Combined with the duration parameter (and bolt size range) it defines how fast it will travel on the blade when using certain blaster bolt styles (like wave). A ballpark is to see 100% speed as ensuring the bolt energy is sure to travel the whole blade during the bolt duration.",
+      "Simple": 0
+    },
+    {
+      "Name": "randc",
+      "FriendlyName": "Randomize flash on clash",
+      "Category": "Battle Fx",
+      "SubCategory": "Clash",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "0",
+      "Description": "Brings some color variance to FoC. Applies also to blaster in HB led mode (ledstrip blasters bolts have their own specific color parameters in ledstrip mode)",
+      "Simple": 0
+    },
+    {
+      "Name": "shmrd",
+      "FriendlyName": "Clash: shimmering effect duration",
+      "Category": "Battle Fx",
+      "SubCategory": "Clash",
+      "Type": "int",
+      "MinValue": 20,
+      "MaxValue": 1000,
+      "ExampleValue": "50",
+      "Description": "duration of the shimmering effect of the high-power LED during a clash. Make sure this duration is not too much longer than the associated sound to keep a nice result.",
+      "Simple": 0
+    },
+    {
+      "Name": "shmrp",
+      "FriendlyName": "Clash: periodicity of light bursts",
+      "Category": "Battle Fx",
+      "SubCategory": "Clash",
+      "Type": "int",
+      "MinValue": 10,
+      "MaxValue": 1000,
+      "ExampleValue": "10",
+      "Description": "periodicity of the light bursts during the clash effect. A slow period will produce tight bursts.",
+      "Simple": 0
+    },
+    {
+      "Name": "shmrr",
+      "FriendlyName": "Clash: randomness of periodicity of light bursts",
+      "Category": "Battle Fx",
+      "SubCategory": "Clash",
+      "Type": "int",
+      "MinValue": 10,
+      "MaxValue": 1000,
+      "ExampleValue": "10",
+      "Description": "random value applied to the periodicity of the light burst during a clash effect. Allows having bursts that are not regularly spaced in time which increases the realism. For instance, a period shmrp of 20 and a random value shmrr of 10 will produce a period between two bursts varying between 20 and 30ms.",
+      "Simple": 0
+    },
+    {
+      "Name": "shmr%",
+      "FriendlyName": "Clash: Shimmer effect depth",
+      "Category": "Battle Fx",
+      "SubCategory": "Clash",
+      "Type": "birange",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "0,50",
+      "Description": "Defines how the shimmer will \"dig\" the defined blade brightness during a clash or a lockup effect. A static flash is achieved by leaving that value to 0. That parameter is actually composed of 2 numbers separated by a comma to define the range to apply to the brightness modification during the shimmer.",
+      "Simple": 0
+    },
+    {
+      "Name": "focd",
+      "FriendlyName": "Flash on Clash: duration",
+      "Category": "Battle Fx",
+      "SubCategory": "Clash",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 1000,
+      "ExampleValue": "50",
+      "Description": "Flash on Clash duration",
+      "Simple": 0
+    },
+    {
+      "Name": "focp",
+      "FriendlyName": "Flash on Clash: periodicity of light bursts",
+      "Category": "Battle Fx",
+      "SubCategory": "Clash",
+      "Type": "int",
+      "MinValue": 10,
+      "MaxValue": 1000,
+      "ExampleValue": "10",
+      "Description": "periodicity of the light bursts during the Flash on Clash effect. A low period will produce tight bursts.",
+      "Simple": 0
+    },
+    {
+      "Name": "focr",
+      "FriendlyName": "Flash on Clash: randomness of periodicity of light bursts",
+      "Category": "Battle Fx",
+      "SubCategory": "Clash",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 1000,
+      "ExampleValue": "10",
+      "Description": "random value applied to the periodicity of the light burst during a Flash on Clash effect. Similar to shmrr but applied to FoC",
+      "Simple": 0
+    },
+    {
+      "Name": "foc%",
+      "FriendlyName": "Flash on Clash: effect depth",
+      "Category": "Battle Fx",
+      "SubCategory": "Clash",
+      "Type": "birange",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "0,80",
+      "Description": "Flash on Clash effect depth. Defines how deep the FoC brightness is dug for �on-top� (or non-mixed) FoC di(c)e. ",
+      "Simple": 0
+    },
+    {
+      "Name": "focf1",
+      "FriendlyName": "Flash on Clash: enabled during Force effect",
+      "Category": "Battle Fx",
+      "SubCategory": "Clash",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "1",
+      "Description": "defines if the Flash on Clash is enabled during Force effect",
+      "Simple": 0
+    },
+    {
+      "Name": "focf2",
+      "FriendlyName": "Flash on Clash: enabled during Force Clash effect",
+      "Category": "Battle Fx",
+      "SubCategory": "Clash",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "1",
+      "Description": "defines if the Flash on Clash is enabled during Force Clash effect",
+      "Simple": 0
+    },
+    {
+      "Name": "style_clash",
+      "FriendlyName": "Clash style",
+      "Category": "Battle Fx",
+      "SubCategory": "Clash",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3,
+      "ExampleValue": "0",
+      "Description": "defines clash fx style",
+      "Simple": 1,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "None",
+          "Description": "none"
+        },
+        {
+          "Index": 1,
+          "Option": "Legacy",
+          "Description": "Legacy clash all over the blade, bring FoC & Shimmer fx, mirroring the blade color when a HB led clash occurs"
+        },
+        {
+          "Index": 2,
+          "Option": "Fade",
+          "Description": "Fade applies FoC color all over the blade and fades back to blade color over time for the duration of focd parameter"
+        },
+        {
+          "Index": 3,
+          "Option": "Local fade",
+          "Description": "Local fade make it fade as well but creates a localized clash that is changing randomly on the blade."
+        },
+        {
+          "Index": 4,
+          "Option": "Local fade II",
+          "Description": "Local fade but ver a specific length and position, shared with localized lockup (style_lockup)"
+        },
+        {
+          "Index": 5,
+          "Option": "Base flare impact",
+          "Description": "Base flare impact at bottom of blade (fade out)"
+        },
+        {
+          "Index": 6,
+          "Option": "Unicorn clash",
+          "Description": "Rainbow localized"
+        },
+        {
+          "Index": 7,
+          "Option": "Absorb",
+          "Description": "Absorb"
+        }
+      ]
+    },
+    {
+      "Name": "focl",
+      "FriendlyName": "Flash on Clash: enabled during Blade Lockup",
+      "Category": "Battle Fx",
+      "SubCategory": "Drag",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "1",
+      "Description": "defines if the Flash on Clash is enabled during Blade Lockup effect",
+      "Simple": 0
+    },
+    {
+      "Name": "mapping_drag",
+      "FriendlyName": "Dynamic behaviour Drag effect",
+      "Category": "Battle Fx",
+      "SubCategory": "Drag",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3,
+      "ExampleValue": "0",
+      "Description": "defines the dynamic behavior of the drag fx",
+      "Simple": 0,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Static",
+          "Description": ""
+        },
+        {
+          "Index": 1,
+          "Option": "Audio controlled",
+          "Description": ""
+        },
+        {
+          "Index": 2,
+          "Option": "Angular controlled",
+          "Description": ""
+        },
+        {
+          "Index": 3,
+          "Option": "-",
+          "Description": ""
+        },
+        {
+          "Index": 4,
+          "Option": "Angular reversed controlled",
+          "Description": ""
+        }
+      ]
+    },
+    {
+      "Name": "style_drag",
+      "FriendlyName": "Drag style",
+      "Category": "Battle Fx",
+      "SubCategory": "Drag / Melt",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "0",
+      "Description": "defines drag fx style",
+      "Simple": 1,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "None",
+          "Description": "All over the blade"
+        },
+        {
+          "Index": 1,
+          "Option": "Noise",
+          "Description": "Simple / uniform noise drag fx reflecting the lockup activity to the tip of the blade but using the specific drag color."
+        },
+        {
+          "Index": 2,
+          "Option": "Sparks",
+          "Description": "Sparking drag with distributed sparks of energy"
+        },
+        {
+          "Index": 3,
+          "Option": "Gradient",
+          "Description": "Gradient colored tip drag"
+        },
+        {
+          "Index": 4,
+          "Option": "Heat",
+          "Description": ""
+        },
+        {
+          "Index": 5,
+          "Option": "Flare",
+          "Description": ""
+        },
+        {
+          "Index": 6,
+          "Option": "GraFx",
+          "Description": ""
+        }
+      ]
+    },
+    {
+      "Name": "style_lockup",
+      "FriendlyName": "Lockup style",
+      "Category": "Battle Fx",
+      "SubCategory": "Lock‑up",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3,
+      "ExampleValue": "0",
+      "Description": "defines lockup fx style",
+      "Simple": 1,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "None",
+          "Description": ""
+        },
+        {
+          "Index": 1,
+          "Option": "Legacy",
+          "Description": "All over the blade"
+        },
+        {
+          "Index": 2,
+          "Option": "Localized",
+          "Description": "Over a specific length and position"
+        },
+        {
+          "Index": 3,
+          "Option": "Noize localized",
+          "Description": "Over a specific length and position, filled with noise"
+        },
+        {
+          "Index": 4,
+          "Option": "Noize localized II",
+          "Description": "Over a specific length and position, filled with different noise"
+        },
+        {
+          "Index": 5,
+          "Option": "Flare",
+          "Description": ""
+        },
+        {
+          "Index": 6,
+          "Option": "Unicorn",
+          "Description": ""
+        },
+        {
+          "Index": 7,
+          "Option": "GraFx sequence",
+          "Description": ""
+        }
+      ]
+    },
+    {
+      "Name": "pos_lockup",
+      "FriendlyName": "Localized lockup position",
+      "Category": "Battle Fx",
+      "SubCategory": "Lock-up",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 280,
+      "ExampleValue": "60",
+      "Description": "defines localized lockup fx position",
+      "Simple": 1
+    },
+    {
+      "Name": "size_lockup",
+      "FriendlyName": "Localized lockup size",
+      "Category": "Battle Fx",
+      "SubCategory": "Lock-up",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 280,
+      "ExampleValue": "40",
+      "Description": "define localized lockup fx size",
+      "Simple": 1
+    },
+    {
+      "Name": "mapping_lockup",
+      "FriendlyName": "Dynamic behaviour Lockup effect",
+      "Category": "Battle Fx",
+      "SubCategory": "Lock-up",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3,
+      "ExampleValue": "0",
+      "Description": "defines the dynamic behavior of the lockup fx",
+      "Simple": 1,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Static",
+          "Description": ""
+        },
+        {
+          "Index": 1,
+          "Option": "Audio controlled",
+          "Description": ""
+        },
+        {
+          "Index": 2,
+          "Option": "Angular controlled",
+          "Description": ""
+        },
+        {
+          "Index": 3,
+          "Option": "--",
+          "Description": ""
+        },
+        {
+          "Index": 4,
+          "Option": "Angular (reversed) controlled",
+          "Description": ""
+        }
+      ]
+    },
+    {
+      "Name": "focf3",
+      "FriendlyName": "Flash on Clash: enabled during StabFx effect",
+      "Category": "Battle Fx",
+      "SubCategory": "Stab",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "1",
+      "Description": "defines if the Flash on Clash is enabled during StabFx effect",
+      "Simple": 0
+    },
+    {
+      "Name": "style_stab",
+      "FriendlyName": "Stab style",
+      "Category": "Battle Fx",
+      "SubCategory": "Stab",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "0",
+      "Description": "defines stab fx style",
+      "Simple": 1,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "None",
+          "Description": "none"
+        },
+        {
+          "Index": 1,
+          "Option": "Legacy",
+          "Description": "Legacy stab has a Brownian noise distributed over the tip."
+        },
+        {
+          "Index": 2,
+          "Option": "Flash",
+          "Description": "Flash stab bring the stab color, fades out over sound duration and has a shaped tail. Due to the tailing, the drag tip size can be slightly increased if more visibility is desired"
+        },
+        {
+          "Index": 3,
+          "Option": "Scroll",
+          "Description": "Scroll stab has a spatial in/out (penetration) effect and some fade out and tail shaping."
+        },
+        {
+          "Index": 4,
+          "Option": "Scroll Out",
+          "Description": "Scroll out stab starts with a flash that fades combined with has a spatial scroll out."
+        },
+        {
+          "Index": 5,
+          "Option": "Burst",
+          "Description": "Burst stab brings randomized sparks over the tip with diffusion."
+        },
+        {
+          "Index": 6,
+          "Option": "Burst Fade",
+          "Description": "Same as Burst stab combined with some fade out"
+        }
+      ]
+    },
+    {
+      "Name": "tridentflk",
+      "FriendlyName": "Trident flicker",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Crossguard / Trident",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "0",
+      "Description": "Trident channels have their flicker computed separately from the main channel(s) in real time, producing the effect that they live on their own and do not totally mirror the main blade behavior. In addition, they can also have their own flicker specified by this parameter, in order to produce a more dramatic flickering effect on the cross-guard.",
+      "Simple": 0
+    },
+    {
+      "Name": "flks",
+      "FriendlyName": "Flickering blade effect",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Flicker Core",
+      "Type": "int",
+      "MinValue": 1,
+      "MaxValue": 500,
+      "ExampleValue": "6",
+      "Description": "A high value produces a damaged saber effect while a small value generates subtile energy changes. The value 0 disables the effect (static blade). Keep above 4 when using a ledstrip blade to avoid competing with the pixels (inherent) refresh rate.",
+      "Simple": 1
+    },
+    {
+      "Name": "flkd",
+      "FriendlyName": "Flickering blade effect depth",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Flicker Core",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "25",
+      "Description": "depth (in %) of the energy fluctuation effect, i.e. the the range over which the LED brightness will be affected during the effect. A low value does not modify the energy very much while a high value � digs � big gaps of light intensity. To be used with the parameter flks. Set to 0 to obtain a static blade. ",
+      "Simple": 1
+    },
+    {
+      "Name": "style_flicker",
+      "FriendlyName": "Flicker style",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Flicker Core",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 4,
+      "ExampleValue": "0",
+      "Description": " defines spatial flicker style",
+      "Simple": 1,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Legacy",
+          "Description": ""
+        },
+        {
+          "Index": 1,
+          "Option": "Bicolor",
+          "Description": ""
+        },
+        {
+          "Index": 2,
+          "Option": "Movie flicker",
+          "Description": ""
+        },
+        {
+          "Index": 3,
+          "Option": "Noise",
+          "Description": ""
+        },
+        {
+          "Index": 4,
+          "Option": "Random",
+          "Description": ""
+        },
+        {
+          "Index": 5,
+          "Option": "Flame",
+          "Description": ""
+        }
+      ]
+    },
+    {
+      "Name": "mapping_flicker",
+      "FriendlyName": "Dynamic behaviour Flicker effect",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Flicker Core",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3,
+      "ExampleValue": "0",
+      "Description": "defines the dynamic behavior of the Flicker fx",
+      "Simple": 1,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Static",
+          "Description": ""
+        },
+        {
+          "Index": 1,
+          "Option": "Audio controlled",
+          "Description": ""
+        },
+        {
+          "Index": 2,
+          "Option": "Angular controlled",
+          "Description": ""
+        },
+        {
+          "Index": 3,
+          "Option": "Motion controlled",
+          "Description": ""
+        },
+        {
+          "Index": 4,
+          "Option": "Angular reversed",
+          "Description": ""
+        }
+      ]
+    },
+    {
+      "Name": "force_flicker",
+      "FriendlyName": "Spatial flicker havoc",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Flicker Core",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 255,
+      "ExampleValue": "0",
+      "Description": "defines the spatial flicker intensity and randomness",
+      "Simple": 0
+    },
+    {
+      "Name": "depth_flicker",
+      "FriendlyName": "Spatial flicker mixing depth",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Flicker Core",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 255,
+      "ExampleValue": "0",
+      "Description": ": defines the spatial flicker mixing depth with flicker color",
+      "Simple": 0
+    },
+    {
+      "Name": "pos_flicker",
+      "FriendlyName": "Spatial flicker location",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Flicker Core",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 255,
+      "ExampleValue": "0",
+      "Description": "defines the spatial flicker location on the blade",
+      "Simple": 0
+    },
+    {
+      "Name": "size_flicker",
+      "FriendlyName": "spatial flicker spreading",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Flicker Core",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 280,
+      "ExampleValue": "0",
+      "Description": "defines the spatial flicker spreading",
+      "Simple": 0
+    },
+    {
+      "Name": "pulsed",
+      "FriendlyName": "Pulse effect depth",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Pulse",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "0",
+      "Description": "Pulse effect depth in %. 100% will dig the full range of the high power LED from max brightness to off.",
+      "Simple": 1
+    },
+    {
+      "Name": "pulsel",
+      "FriendlyName": "Pulse effect length",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Pulse",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 10000,
+      "ExampleValue": "0",
+      "Description": "Pulse effect length (duration). Defines the ramp up/down time.",
+      "Simple": 1
+    },
+    {
+      "Name": "mapping_sbright",
+      "FriendlyName": "Dynamic behaviour swingbright effect",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Swing‑Brightness",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3,
+      "ExampleValue": "0",
+      "Description": "defines the dynamic behavior of the swingbright fx",
+      "Simple": 0,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Static",
+          "Description": ""
+        },
+        {
+          "Index": 1,
+          "Option": "Audio controlled",
+          "Description": ""
+        },
+        {
+          "Index": 2,
+          "Option": "Angular controlled",
+          "Description": ""
+        },
+        {
+          "Index": 3,
+          "Option": "Motion controlled",
+          "Description": ""
+        },
+        {
+          "Index": 4,
+          "Option": "Angular reversed",
+          "Description": ""
+        }
+      ]
+    },
+    {
+      "Name": "style_sbright",
+      "FriendlyName": "Style of swingbright effect",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Swing‑Brightness",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "defines the dynamic behavior of the swingbright fx",
+      "Simple": 0,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Swingbright",
+          "Description": "Brightens the blade"
+        },
+        {
+          "Index": 1,
+          "Option": "Swing dampen",
+          "Description": "Dampens the blade"
+        }
+      ]
+    },
+    {
+      "Name": "delay_sbright",
+      "FriendlyName": "Swing bright delay",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Swing‑Brightness",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 255,
+      "ExampleValue": "100",
+      "Description": "Determines the speed of the cooldown of the swingbright effect",
+      "Simple": 0
+    },
+    {
+      "Name": "unstable",
+      "FriendlyName": "Unstable effect",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Unstable",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 10000,
+      "ExampleValue": "0",
+      "Description": "These effects simulate an unstable blade.",
+      "Simple": 1,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "None",
+          "Description": ""
+        },
+        {
+          "Index": 1,
+          "Option": "Unstable blade",
+          "Description": ""
+        },
+        {
+          "Index": 2,
+          "Option": "Flame. Our legacy fire",
+          "Description": ""
+        },
+        {
+          "Index": 3,
+          "Option": "Rain sizzle",
+          "Description": ""
+        },
+        {
+          "Index": 4,
+          "Option": "Chainsaw",
+          "Description": ""
+        },
+        {
+          "Index": 5,
+          "Option": "Starkiller",
+          "Description": ""
+        },
+        {
+          "Index": 6,
+          "Option": "Unstable TFU",
+          "Description": ""
+        },
+        {
+          "Index": 7,
+          "Option": "Gradient",
+          "Description": ""
+        },
+        {
+          "Index": 8,
+          "Option": "Wave",
+          "Description": ""
+        },
+        {
+          "Index": 9,
+          "Option": "Rainbow",
+          "Description": ""
+        },
+        {
+          "Index": 10,
+          "Option": "Theater chase",
+          "Description": ""
+        },
+        {
+          "Index": 11,
+          "Option": "Sauron",
+          "Description": ""
+        },
+        {
+          "Index": 12,
+          "Option": "Sauron II",
+          "Description": ""
+        },
+        {
+          "Index": 13,
+          "Option": "Jedi Fallen Order",
+          "Description": ""
+        },
+        {
+          "Index": 14,
+          "Option": "Knight Rider / Energy Beam",
+          "Description": ""
+        },
+        {
+          "Index": 15,
+          "Option": "Generative Unstable Fire",
+          "Description": ""
+        },
+        {
+          "Index": 16,
+          "Option": "Bicolor Pulse Fx",
+          "Description": ""
+        },
+        {
+          "Index": 17,
+          "Option": "GraFx powerered blade",
+          "Description": ""
+        },
+        {
+          "Index": 18,
+          "Option": "Vision Fx (GrafX powered)",
+          "Description": ""
+        }
+      ]
+    },
+    {
+      "Name": "mapping_color",
+      "FriendlyName": "Fx color map",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Unstable",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "defines the fx color map (legacy vs. heat mapping)",
+      "Simple": 0,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Legacy",
+          "Description": ""
+        },
+        {
+          "Index": 1,
+          "Option": "Heat",
+          "Description": ""
+        }
+      ]
+    },
+    {
+      "Name": "mapping_move",
+      "FriendlyName": "Movement mapping sensitivity",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Unstable",
+      "Type": "birange",
+      "MinValue": 0,
+      "MaxValue": 1023,
+      "ExampleValue": "80,310",
+      "Description": "range used for mapping movement to the fx (like swingbright). A low value means the effect will be quickly visible when swinging. High value means it will be less and later visible during swinging",
+      "Simple": 0
+    },
+    {
+      "Name": "mapping_audio",
+      "FriendlyName": "Audio mapping sensitivity",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Unstable",
+      "Type": "birange",
+      "MinValue": 0,
+      "MaxValue": 32000,
+      "ExampleValue": "8000,24000",
+      "Description": "range used for mapping audio to the fx (like flicker). A low value means the effect will be quickly visible on audio change. High value means it will be less and later visible during audio change",
+      "Simple": 0
+    },
+    {
+      "Name": "mapping_unstable",
+      "FriendlyName": "Dynamic behaviour unstable effect",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Unstable",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3,
+      "ExampleValue": "0",
+      "Description": "defines the dynamic behavior of the unstable fx",
+      "Simple": 0,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Static",
+          "Description": ""
+        },
+        {
+          "Index": 1,
+          "Option": "Audio controlled",
+          "Description": ""
+        },
+        {
+          "Index": 2,
+          "Option": "Angular controlled",
+          "Description": ""
+        },
+        {
+          "Index": 3,
+          "Option": "-",
+          "Description": ""
+        },
+        {
+          "Index": 4,
+          "Option": "Angular reversed",
+          "Description": ""
+        }
+      ]
+    },
+    {
+      "Name": "hcool",
+      "FriendlyName": "High cool",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Unstable",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 255,
+      "ExampleValue": "0",
+      "Description": "defines how to temper the instability. Low values make the blade return quicker to its stable while high values will make the blade overall more unstable / active.",
+      "Simple": 1
+    },
+    {
+      "Name": "lcool",
+      "FriendlyName": "Low cool",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Unstable",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 255,
+      "ExampleValue": "0",
+      "Description": "defines how to temper the instability. Low values make the blade return quicker to its stable while high values will make the blade overall more unstable / active.",
+      "Simple": 1
+    },
+    {
+      "Name": "sparkf",
+      "FriendlyName": "instability force",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Unstable",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 255,
+      "ExampleValue": "0",
+      "Description": "defines the instability force",
+      "Simple": 1
+    },
+    {
+      "Name": "sparkd",
+      "FriendlyName": "Instability spreading",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Unstable",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "0",
+      "Description": "defines the instability spreading on the blade (0-100% of the blade length).",
+      "Simple": 1
+    },
+    {
+      "Name": "drift",
+      "FriendlyName": "Instability contamination",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Unstable",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "defines if the instability contaminates over the blade. Used for unstable and rain sizzle, set to 1 automatically for the fire fx ",
+      "Simple": 1
+    },
+    {
+      "Name": "mapb",
+      "FriendlyName": "Unstable dark spots",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Unstable",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 255,
+      "ExampleValue": "0",
+      "Description": "define what % of the instability will affect the blade color (dim). A high value will �dig� more in the blade color and will create darker spots.",
+      "Simple": 1
+    },
+    {
+      "Name": "mapc",
+      "FriendlyName": "Unstable FOC spots",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Unstable",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 255,
+      "ExampleValue": "0",
+      "Description": "define what % of the instability will bring up the FoC color where the instability is. High value will produce bright FoC colored spots. ",
+      "Simple": 1
+    },
+    {
+      "Name": "refreshfx",
+      "FriendlyName": "Blade refresh rate",
+      "Category": "Continuous Blade Appearance",
+      "SubCategory": "Unstable",
+      "Type": "int",
+      "MinValue": 6,
+      "MaxValue": 500,
+      "ExampleValue": "6",
+      "Description": "defines in ms the refresh rate (and computation) of the ledstrip fx. It's supposed to be equal or greater to the flicker speed. Higher values (as a period) lead to slower refresh rate and can be used for slow effects like fire.",
+      "Simple": 1
+    },
+    {
+      "Name": "poi",
+      "FriendlyName": "Power on Interrupt",
+      "Category": "Power‑Transition Effects",
+      "SubCategory": "Ignition / Scroll",
+      "Type": "tribool",
+      "MinValue": 0,
+      "MaxValue": 2,
+      "ExampleValue": "2",
+      "Description": "power-on interrupt. When enabled, a sound fx (clash, swing, smoothswing) can interrupt the power-on sound before the ignition sequence is over. 0 disables power-on sound interruption, motion sounds and smoothswing (if enabled) will start once the power-on sound is over. With poi=1, motion is enabled once quick-on ignition has timed out (qon, per-font parameter, in font_config.txt). With poi=2, motion is enabled when ignition starts.",
+      "Simple": 0,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Interrupt disabled",
+          "Description": "Action-sounds will start after power-on sound has completed"
+        },
+        {
+          "Index": 1,
+          "Option": "Quick-on intterupt",
+          "Description": "Action-sounds will start after quick-on ignition has timed out"
+        },
+        {
+          "Index": 2,
+          "Option": "Interrupt enabled",
+          "Description": "Action sounds on ignition start"
+        }
+      ]
+    },
+    {
+      "Name": "style_preon",
+      "FriendlyName": "Preon effect",
+      "Category": "Power‑Transition Effects",
+      "SubCategory": "Pre‑On",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 4,
+      "ExampleValue": "0",
+      "Description": "defines which preon effect will be shown during a preon soundeffect",
+      "Simple": 1,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "None",
+          "Description": ""
+        },
+        {
+          "Index": 1,
+          "Option": "Rey",
+          "Description": "quick burst/glitch of blue color before igniting the blade"
+        },
+        {
+          "Index": 2,
+          "Option": "Base noise",
+          "Description": "randomized noisy lower segment of the blade, using FoC color"
+        },
+        {
+          "Index": 3,
+          "Option": "Base candle",
+          "Description": "similar as above but with length variation"
+        },
+        {
+          "Index": 4,
+          "Option": "GraFx preon",
+          "Description": "GraFx preon"
+        },
+        {
+          "Index": 5,
+          "Option": "Broken preon",
+          "Description": "An irregular flickering in the blade color at the bottom 20% of the blade"
+        }
+      ]
+    },
+    {
+      "Name": "flkon",
+      "FriendlyName": "Blade flicker during power on",
+      "Category": "Power‑Transition Effects",
+      "SubCategory": "Ignition / Scroll",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "1",
+      "Description": "",
+      "Simple": 0
+    },
+    {
+      "Name": "on_fade",
+      "FriendlyName": "Progressive fade in",
+      "Category": "Power‑Transition Effects",
+      "SubCategory": "Ignition / Scroll",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "enables the progressive fade in effect (combined with the ledstrip scrolling effect, this is the ScrollFade feature). Applies to both HB leds and ledstrip blades. With off_fade, those are part of the blade profiles.",
+      "Simple": 0
+    },
+    {
+      "Name": "style_pon",
+      "FriendlyName": "Power on effects",
+      "Category": "Power‑Transition Effects",
+      "SubCategory": "Ignition / Scroll",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 8,
+      "ExampleValue": "0",
+      "Description": "The power on effect",
+      "Simple": 1,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Normal",
+          "Description": "normal/regular (legacy) power-on with just scrolling and fade if onfade is enabled."
+        },
+        {
+          "Index": 1,
+          "Option": "Lightstick",
+          "Description": "lightstick style, with scrolling disabled (non-spatial fade if onfade is enabled) "
+        },
+        {
+          "Index": 2,
+          "Option": "Simple flare",
+          "Description": "simple flare style, starts with FoC color then fades back to blade color, over the whole blade"
+        },
+        {
+          "Index": 3,
+          "Option": "Base flare",
+          "Description": " Same as Simple flare but applies FoC to the base of the blade only"
+        },
+        {
+          "Index": 4,
+          "Option": "Tip flare",
+          "Description": "FoC colored extending tip during ignition (uses drag tip size)"
+        },
+        {
+          "Index": 5,
+          "Option": "Full flare style",
+          "Description": "Combines Base and Type flare"
+        },
+        {
+          "Index": 6,
+          "Option": "Crumble",
+          "Description": "Pixelated ignition"
+        },
+        {
+          "Index": 7,
+          "Option": "Quicksilver",
+          "Description": "Variant of tip flare but with tailing added"
+        },
+        {
+          "Index": 8,
+          "Option": "Mercury",
+          "Description": "A flood variant of quicksilver"
+        },
+        {
+          "Index": 9,
+          "Option": "Catchup style",
+          "Description": "Curtain like fx. FoC color whiped by blade color"
+        },
+        {
+          "Index": 10,
+          "Option": "GrafX sequence",
+          "Description": "GrafX sequence"
+        },
+        {
+          "Index": 11,
+          "Option": "Inverted from tip",
+          "Description": "Inverted from tip"
+        },
+        {
+          "Index": 12,
+          "Option": "Split-in, tips to center",
+          "Description": "Split-in, tips to center"
+        },
+        {
+          "Index": 13,
+          "Option": "Split-out, center to tips",
+          "Description": "Split-out, center to tips"
+        },
+        {
+          "Index": 14,
+          "Option": "Chopped-on",
+          "Description": "Poweron in flashing chunks"
+        }
+      ]
+    },
+    {
+      "Name": "over_pon",
+      "FriendlyName": "Takeover blade effect",
+      "Category": "Power‑Transition Effects",
+      "SubCategory": "Ignition / Scroll",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3,
+      "ExampleValue": "0",
+      "Description": "Power on blending",
+      "Simple": 0,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Melt",
+          "Description": ""
+        },
+        {
+          "Index": 1,
+          "Option": "Overlay",
+          "Description": ""
+        },
+        {
+          "Index": 2,
+          "Option": "BlendFX",
+          "Description": ""
+        },
+        {
+          "Index": 3,
+          "Option": "Curtain",
+          "Description": ""
+        },
+        {
+          "Index": 4,
+          "Option": "GraFx Xfade",
+          "Description": "Cross-fades the GraFx animation with the blade fx"
+        }
+      ]
+    },
+    {
+      "Name": "ignd",
+      "FriendlyName": "Ignition delay",
+      "Category": "Power‑Transition Effects",
+      "SubCategory": "Ignition / Scroll",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 10000,
+      "ExampleValue": "0",
+      "Description": "Delays the ignition scrolling or power-on fx process. Set qon so that the expected fx duration (scrolling) is qon – ignd. For example, if you want the blade to scroll out in 400 ms with a delay of 200 ms after the beginning of the power-on sound, set qon = 600 and ignd = 200. ",
+      "Simple": 0
+    },
+    {
+      "Name": "flkoff",
+      "FriendlyName": "Blade flicker during power off",
+      "Category": "Power‑Transition Effects",
+      "SubCategory": "Retraction",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "1",
+      "Description": "",
+      "Simple": 0
+    },
+    {
+      "Name": "off_fade",
+      "FriendlyName": "Progressive fade out",
+      "Category": "Power‑Transition Effects",
+      "SubCategory": "Retraction",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "enables the progressive fade out effect (combined with the ledstrip scrolling effect, this is the ScrollFade feature). Applies to both HB leds and ledstrip blades. With off_fade, those are part of the blade profiles.",
+      "Simple": 0
+    },
+    {
+      "Name": "style_poff",
+      "FriendlyName": "Power off effects",
+      "Category": "Power‑Transition Effects",
+      "SubCategory": "Retraction",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 9,
+      "Description": "The power off effect",
+      "Simple": 1,
+      "ExampleValue": "0",
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Normal",
+          "Description": "normal/regular (legacy) power-on with just scrolling and fade if onfade is enabled."
+        },
+        {
+          "Index": 1,
+          "Option": "Lightstick",
+          "Description": "lightstick style, with scrolling disabled (non-spatial fade if onfade is enabled) "
+        },
+        {
+          "Index": 2,
+          "Option": "Crumble",
+          "Description": "Pixelated retraction"
+        },
+        {
+          "Index": 3,
+          "Option": "Star dust",
+          "Description": " Leaves light dust behind"
+        },
+        {
+          "Index": 4,
+          "Option": "Super nova",
+          "Description": "A FoC colored comet head with particle tailing"
+        },
+        {
+          "Index": 5,
+          "Option": "Leak",
+          "Description": "A variant of crumble"
+        },
+        {
+          "Index": 6,
+          "Option": "Dissolve",
+          "Description": "Retraction with tailing, blade colored only"
+        },
+        {
+          "Index": 7,
+          "Option": "Star flakes",
+          "Description": "FoC sparkles/flicker tailing"
+        },
+        {
+          "Index": 8,
+          "Option": "Quicksilver",
+          "Description": "Variant of tip flare but with tailing added"
+        },
+        {
+          "Index": 9,
+          "Option": "Mercury",
+          "Description": "A flood variant of quicksilver"
+        },
+        {
+          "Index": 10,
+          "Option": "Split style",
+          "Description": "Retraction in 2 halves to the center of the blade with a fading dot (FoC color)"
+        },
+        {
+          "Index": 11,
+          "Option": "GrafX sequence",
+          "Description": "GrafX sequence"
+        },
+        {
+          "Index": 12,
+          "Option": "Simple flare",
+          "Description": "simple flare style, starts with FoC color then fades back to blade color, over the whole blade"
+        },
+        {
+          "Index": 13,
+          "Option": "Base flare",
+          "Description": "base flare style. Same as Simple flare but applies FoC to the base of the blade only"
+        },
+        {
+          "Index": 14,
+          "Option": "Tip flare",
+          "Description": "tip flare style. FoC colored extending tip during ignition (uses drag tip size)"
+        },
+        {
+          "Index": 15,
+          "Option": "Full flare",
+          "Description": "full flare style. Combines tip flare and base flare"
+        },
+        {
+          "Index": 16,
+          "Option": "Inverted Star",
+          "Description": "Inverted Star. Retraction from base to top with a flash-decay star effect."
+        },
+        {
+          "Index": 17,
+          "Option": "Chopped-off",
+          "Description": "Poweroff in flashing chunks"
+        }
+      ]
+    },
+    {
+      "Name": "retd",
+      "FriendlyName": "retraction delay",
+      "Category": "Power‑Transition Effects",
+      "SubCategory": "Retraction",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 10000,
+      "ExampleValue": "0",
+      "Description": "Delays the retraction scrolling or power-on fx process.",
+      "Simple": 0
+    },
+    {
+      "Name": "over_poff",
+      "FriendlyName": "Blending of power off effect",
+      "Category": "Power‑Transition Effects",
+      "SubCategory": "Retraction",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 2,
+      "ExampleValue": "0",
+      "Description": "Blending of power off effect",
+      "Simple": 0,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Melt",
+          "Description": ""
+        },
+        {
+          "Index": 1,
+          "Option": "Overlay",
+          "Description": ""
+        },
+        {
+          "Index": 2,
+          "Option": "BlendFX",
+          "Description": ""
+        },
+        {
+          "Index": 3,
+          "Option": "-",
+          "Description": "empty placeholder"
+        },
+        {
+          "Index": 4,
+          "Option": "GraFx Xfade",
+          "Description": "Cross-fades the GraFx animation with the blade fx"
+        }
+      ]
+    },
+    {
+      "Name": "style_postoff",
+      "FriendlyName": "Postoff effect",
+      "Category": "Power‑Transition Effects",
+      "SubCategory": "Post‑Off",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 4,
+      "ExampleValue": "0",
+      "Description": "defines which postoff effect will be shown during a pstoff soundeffect",
+      "Simple": 1,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "None",
+          "Description": ""
+        },
+        {
+          "Index": 1,
+          "Option": "Temperature decay",
+          "Description": "Heat decay with retraction & temperature gradient fade out on the base of the blade"
+        },
+        {
+          "Index": 2,
+          "Option": "Base decay",
+          "Description": "Same with FoC color"
+        },
+        {
+          "Index": 3,
+          "Option": "Flash decay",
+          "Description": "Simple fade out of the base section"
+        },
+        {
+          "Index": 4,
+          "Option": "GraFx post off",
+          "Description": "GraFx post off"
+        },
+        {
+          "Index": 5,
+          "Option": "Broken post off",
+          "Description": "Broken post off"
+        }
+      ]
+    },
+    {
+      "Name": "style_accents",
+      "FriendlyName": "Led config index",
+      "Category": "Profile & External Configuration",
+      "SubCategory": "Accent/Pixies/GraFx Links",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "0",
+      "Description": "defines the linking between the profile and the location of the accent led configuration file (leds.txt) within /extra/ACCENTS indexed subfolders",
+      "Simple": 0
+    },
+    {
+      "Name": "style_pixies",
+      "FriendlyName": "pixel accents config index",
+      "Category": "Profile & External Configuration",
+      "SubCategory": "Accent/Pixies/GraFx Links",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "0",
+      "Description": "defines the linking between the profile and the location of the pixel accents configuration file within /extra/PIXIES indexed subfolders",
+      "Simple": 0
+    },
+    {
+      "Name": "style_auxpixies",
+      "FriendlyName": "aux pixel accents config index",
+      "Category": "Profile & External Configuration",
+      "SubCategory": "Accent/Pixies/GraFx Links",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "0",
+      "Description": "defines the linking between the profile and the location of the pixel accents configuration file within /extra/PIXIES indexed subfolders",
+      "Simple": 0
+    },
+    {
+      "Name": "style_grafx1",
+      "FriendlyName": "grafx config index",
+      "Category": "Profile & External Configuration",
+      "SubCategory": "Accent/Pixies/GraFx Links",
+      "Type": "int",
+      "MinValue": -1,
+      "MaxValue": 100,
+      "ExampleValue": "-1",
+      "Description": "defines the linking between the main blade profile and the location of the grafx configuration file and files /extra/GRAFX indexed subfolders",
+      "Simple": 0
+    },
+    {
+      "Name": "style_grafx2",
+      "FriendlyName": "grafx config index",
+      "Category": "Profile & External Configuration",
+      "SubCategory": "Accent/Pixies/GraFx Links",
+      "Type": "int",
+      "MinValue": -1,
+      "MaxValue": 100,
+      "ExampleValue": "-1",
+      "Description": "defines the linking between the aux (ls2) profile and the location of the grafx configuration file and files /extra/GRAFX indexed subfolders",
+      "Simple": 0
+    },
+    {
+      "Name": "style_grafx3",
+      "FriendlyName": "grafx config index",
+      "Category": "Profile & External Configuration",
+      "SubCategory": "Accent/Pixies/GraFx Links",
+      "Type": "int",
+      "MinValue": -1,
+      "MaxValue": 100,
+      "ExampleValue": "-1",
+      "Description": "defines the linking between the aux (ls1 or ls2) profile and the location of the grafx configuration file and files /extra/GRAFX indexed subfolders",
+      "Simple": 0
+    },
+    {
+      "Name": "fade",
+      "FriendlyName": "color profile transition time",
+      "Category": "Profile & External Configuration",
+      "SubCategory": "Cross‑Profile Fades",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 10000,
+      "ExampleValue": "0",
+      "Description": "color profile transition time. Must be lower than the color.wav sound duration",
+      "Simple": 0
+    },
+    {
+      "Name": "pname",
+      "FriendlyName": "Blade profile name",
+      "Category": "Profile & External Configuration",
+      "SubCategory": "Profile Identity",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "ExampleValue": "MyProfile",
+      "Description": "Gives the option to name your blade profiles!",
+      "Simple": 0
+    },
+    {
+      "Name": "bladepower",
+      "FriendlyName": "Blade power",
+      "Category": "System & Power Management",
+      "SubCategory": "Blade‑Power Budget",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "100",
+      "Description": "Control over the blade power in %. Allows for reducing the power bill without touching the colors themselves",
+      "Simple": 0
+    },
+    {
+      "Name": "magic",
+      "FriendlyName": "Magnetic activation",
+      "Category": "System & Power Management",
+      "SubCategory": "Mag‑Safe / Locks",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 60000,
+      "ExampleValue": "0",
+      "Description": "if enabled with a non-zero value, defines the magnetic threshold to activate the saber",
+      "Simple": 0
+    },
+    {
+      "Name": "saberlock",
+      "FriendlyName": "Saberlock",
+      "Category": "System & Power Management",
+      "SubCategory": "Mag‑Safe / Locks",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3,
+      "ExampleValue": "0",
+      "Description": "Activation control of the saber using a magnetic field such as a magnetic ring. Prevent activation (or retraction) when magnetic values are not met.",
+      "Simple": 0,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Disabled",
+          "Description": "If there's 'magic' threshold defined, magic activation is enabled"
+        },
+        {
+          "Index": 1,
+          "Option": "Magic activation",
+          "Description": "Without the 'magic' threshold being met, activation is denied"
+        },
+        {
+          "Index": 2,
+          "Option": "Magic retraction",
+          "Description": "Without the 'magic' threshold being met, retraction is denied"
+        },
+        {
+          "Index": 3,
+          "Option": "Magic activation and retraction",
+          "Description": "Without the 'magic' threshold being met, activation and retraction are denied"
+        }
+      ]
+    },
+    {
+      "Name": "omnisabers",
+      "FriendlyName": "Omnisaber feature",
+      "Category": "System & Power Management",
+      "SubCategory": "Remote / Omnisabers",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "enables the Omnisabers feature which remotely transmits saber actions to a distant system via the serial port.",
+      "Simple": 0
+    },
+    {
+      "Name": "wakeup",
+      "FriendlyName": "Wakeup by movement",
+      "Category": "System & Power Management",
+      "SubCategory": "Sleep / Wake",
+      "Type": "tribool",
+      "MinValue": 0,
+      "MaxValue": 2,
+      "ExampleValue": "0",
+      "Description": "defines if the board can be woken up (leaving sleep mode) by moving the hilt. When parameter is set to 0, and once the board has entered deep sleep mode, board can only be woken up by the blade ignition (activator) switch. When set to 1 or 2, motion of the hilt while the blade is off will reset the sleep timer which maintains the hilt in idle mode, hence playing the accent led sequence matching that mode. However, when parameter is set to 1, motion on the hilt allows the board to leave the sleep state, while being set to 2, motion will not allow the board to leave sleep once that state has been reached.",
+      "Simple": 0,
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Disabled",
+          "Description": "If the board is in deep sleep mode the board can only be awoken by the blade ignition (activator) switch."
+        },
+        {
+          "Index": 1,
+          "Option": "Keep awaken",
+          "Description": "Motion of the hilt will reset the sleep timer. Motion of the hilt will allow the board to leave sleep state."
+        },
+        {
+          "Index": 2,
+          "Option": "Wake on Move",
+          "Description": "Motion of the hilt will reset the sleep timer. Motion of the hilt will not allow the board to leave sleep state."
+        }
+      ]
+    }
+  ]
+}

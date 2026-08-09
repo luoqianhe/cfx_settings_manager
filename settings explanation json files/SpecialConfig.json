@@ -1,0 +1,511 @@
+{
+  "TypeConfig": "SpecialConfig",
+  "CfxProperties": [
+    {
+      "Name": "blademusicstyle",
+      "FriendlyName": "iSaber visual render style",
+      "Category": "iSaber",
+      "SubCategory": "",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 6,
+      "Description": "When in ledstrip mode, iSaber will use the blade as a visual renderer of the sound when the saber is on",
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Normal blade",
+          "Description": "no sound interaction (normal blade during iSaber)"
+        },
+        {
+          "Index": 1,
+          "Option": "FoC color blending",
+          "Description": "FoC color blending with the blade (all over the blade) based on the audio"
+        },
+        {
+          "Index": 2,
+          "Option": "FoC color progressive overlay",
+          "Description": "FoC color progressive overlay above the blade (bi-color bargraph)"
+        },
+        {
+          "Index": 3,
+          "Option": "Blade color bargraph",
+          "Description": "Blade color bargraph"
+        },
+        {
+          "Index": 4,
+          "Option": "FoC to Blade gradient",
+          "Description": "FoC color (bottom) to blade color (top) gradient bargraph"
+        },
+        {
+          "Index": 5,
+          "Option": "Vintage",
+          "Description": "Vintage bargraph (red-orange-yellow-green gradient)"
+        },
+        {
+          "Index": 6,
+          "Option": "Rainbow bargraph",
+          "Description": "Rainbow bargraph"
+        }
+      ]
+    },
+    {
+      "Name": "maxvol",
+      "FriendlyName": "maximum volume",
+      "Category": "Sound",
+      "SubCategory": "",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "Description": "Sets the maximum volume that the soundboard will output"
+    },
+    {
+      "Name": "bank",
+      "FriendlyName": "Startup sound font",
+      "Category": "Sound",
+      "SubCategory": "",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 1000000,
+      "Description": "Force a specific sound bank at startup (overrides prefs.txt) for a character saber"
+    },
+    {
+      "Name": "simplemenu",
+      "FriendlyName": "Simplified Vocal menu",
+      "Category": "Menu",
+      "SubCategory": "",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "Description": "Simplified Vocal menu (no system / games / USB)"
+    },
+    {
+      "Name": "auto-on",
+      "FriendlyName": "Automatic Power ON",
+      "Category": "Automation",
+      "SubCategory": "",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "Description": "Base delay in ms followed by a % of randomness. 5000,10 <=> {4500 ; 5500} ms. <br>A new random color profile is selected at each ignition. Every 10 ignition a random blade profile is selected.<br>Example setting: 5000,10"
+    },
+    {
+      "Name": "auto-off",
+      "FriendlyName": "Automatic Power OFF",
+      "Category": "Automation",
+      "SubCategory": "",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "Description": "Base delay in ms followed by a % of randomness. 5000,10 <=> {4500 ; 5500} ms. <br>A new random color profile is selected at each ignition. Every 10 ignition a random blade profile is selected.<br>Example setting: 8000,5"
+    },
+    {
+      "Name": "auto-shutoff",
+      "FriendlyName": "Automatic shutoff",
+      "Category": "Automation",
+      "SubCategory": "",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "Description": "Base delay in ms followed by a % of randomness. 5000,10 <=> {4500 ; 5500} ms. <br>A new random color profile is selected at each ignition. Every 10 ignition a random blade profile is selected.<br>Example setting: 120000"
+    },
+    {
+      "Name": "auto-dim",
+      "FriendlyName": "Automatic Dim",
+      "Category": "Automation",
+      "SubCategory": "",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "Description": "Base delay in ms followed by a % of randomness. 5000,10 <=> {4500 ; 5500} ms. <br>A new random color profile is selected at each ignition. Every 10 ignition a random blade profile is selected.<br>Example setting: 360000,30"
+    },
+    {
+      "Name": "livewire",
+      "FriendlyName": "Live Wire",
+      "Category": "iSaber",
+      "SubCategory": "",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 2,
+      "Description": "Live Wire options : disable (led)strip power after ",
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "never",
+          "Description": "Never disable (led)strip power"
+        },
+        {
+          "Index": 1,
+          "Option": "disable (led)strip power after power off",
+          "Description": "disable (led)strip power after power off"
+        },
+        {
+          "Index": 2,
+          "Option": "after sleep",
+          "Description": "disable (led)strip power after after sleep"
+        }
+      ]
+    },
+    {
+      "Name": "tangible",
+      "FriendlyName": "Tangible font selection",
+      "Category": "Automation",
+      "SubCategory": "",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "Description": "Tangible font selection. Use with an external 10k Pullup resistor to 3.3V (main or aux.) and GPIO1 - Now 16 slots.<br>x <-> don't start / X <-> don't start + retraction on removal / o <-> start ok / - <-> neutral / number <-> font to change to addons : r <-> detects removal but won't prevent start / O <-> plays start ok only if previously in another state.<br>Example setting: o,-,-,-,-,-,-,-,-,-,-,-,-,-,-,X"
+    },
+    {
+      "Name": "oledflip",
+      "FriendlyName": "Flip the OLED",
+      "Category": "OLED",
+      "SubCategory": "",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "Description": "rotates the display 180� to adapt to the wiring or orientation in the hilt. 0 (or commented) is the regular orientation with the text being read normally with the screen wiring pads on the left side. 1 flips the orientation 180�."
+    },
+    {
+      "Name": "oledversion",
+      "FriendlyName": "Show firmwareversion at boot",
+      "Category": "OLED",
+      "SubCategory": "",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 4000,
+      "Description": "defines if the firmware version is displayed at boot time (before the boot logo) and for how long (in ms)."
+    },
+    {
+      "Name": "oledscreensaver",
+      "FriendlyName": "Screensaver delay",
+      "Category": "OLED",
+      "SubCategory": "",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100000000000,
+      "Description": "delay after which the screen savers will be triggered on the OLED."
+    },
+    {
+      "Name": "oledcustom",
+      "FriendlyName": "Custom boot text",
+      "Category": "OLED",
+      "SubCategory": "",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "Description": "custom text to display on the OLED along with the firmware version screen (boot time if oledversion is enabled, and idle time). About 20 characters maximum."
+    },
+    {
+      "Name": "oledstop",
+      "FriendlyName": "OLED Disabling",
+      "Category": "OLED",
+      "SubCategory": "",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "Description": "disables the oled from further use (for testing purpose). When this parameter is present the OLED is disabled"
+    },
+    {
+      "Name": "oledland",
+      "FriendlyName": "Oled landing page",
+      "Category": "OLED",
+      "SubCategory": "",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 10,
+      "Description": "Oled landing page after booting or power off.",
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "PLI",
+          "Description": "Power Level Indicator"
+        },
+        {
+          "Index": 1,
+          "Option": "Font",
+          "Description": "Font"
+        },
+        {
+          "Index": 2,
+          "Option": "Version",
+          "Description": "Shows firmware version"
+        },
+        {
+          "Index": 3,
+          "Option": "Crystal",
+          "Description": "Crystal"
+        },
+        {
+          "Index": 4,
+          "Option": "Accents",
+          "Description": "Accents"
+        },
+        {
+          "Index": 5,
+          "Option": "Binary accents",
+          "Description": "Binary accents"
+        },
+        {
+          "Index": 6,
+          "Option": "Geiger",
+          "Description": "Geiger"
+        },
+        {
+          "Index": 7,
+          "Option": "Scope",
+          "Description": "Scope"
+        },
+        {
+          "Index": 8,
+          "Option": "Force",
+          "Description": "Force"
+        },
+        {
+          "Index": 9,
+          "Option": "Nothing",
+          "Description": "Nothing"
+        },
+        {
+          "Index": 10,
+          "Option": "Screen savers",
+          "Description": "Screen savers"
+        }
+      ]
+    },
+    {
+      "Name": "goofy",
+      "FriendlyName": "Swap ACT and AUX switches",
+      "Category": "OLED",
+      "SubCategory": "",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "Description": "Swap ACT and AUX switches"
+    },
+    {
+      "Name": "zombie",
+      "FriendlyName": "Revive from deep sleep delay",
+      "Category": "Wake",
+      "SubCategory": "",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100000000,
+      "Description": "Revive from deep sleep delay"
+    },
+    {
+      "Name": "spectrum_combos",
+      "FriendlyName": "Spectrum menu Aux+Act / Aux+Twist combos",
+      "Category": "iSaber",
+      "SubCategory": "",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3,
+      "Description": "Spectrum menu Aux+Act / Aux+Twist combos",
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "None",
+          "Description": ""
+        },
+        {
+          "Index": 1,
+          "Option": "Aux+Act",
+          "Description": ""
+        },
+        {
+          "Index": 2,
+          "Option": "Aux+Twist",
+          "Description": ""
+        },
+        {
+          "Index": 3,
+          "Option": "Aux+Twist and Aux+Act",
+          "Description": ""
+        }
+      ]
+    },
+    {
+      "Name": "bladeplistyle",
+      "FriendlyName": "PLI style",
+      "Category": "PLI",
+      "SubCategory": "",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3,
+      "Description": "display a PLI over the blade if no OLED is attached (and in ledstrip mode)",
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Disable",
+          "Description": ""
+        },
+        {
+          "Index": 1,
+          "Option": "Solid color defined below",
+          "Description": ""
+        },
+        {
+          "Index": 2,
+          "Option": "Gradient from white (top) to defined color (bottom)",
+          "Description": ""
+        },
+        {
+          "Index": 3,
+          "Option": "Vintage",
+          "Description": ""
+        },
+        {
+          "Index": 4,
+          "Option": "Vintage Reversed (green=max)",
+          "Description": ""
+        },
+        {
+          "Index": 5,
+          "Option": "Rainbow",
+          "Description": ""
+        }
+      ]
+    },
+    {
+      "Name": "bladeplicolor",
+      "FriendlyName": "PLI Color",
+      "Category": "PLI",
+      "SubCategory": "",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "Description": "\"specifies the PLI color either with the 4 channel list or the color dictionary.<br>Example: bladeplicolor=Crimson)"
+    },
+    {
+      "Name": "bladeplisize",
+      "FriendlyName": "PLI size in pixels",
+      "Category": "Wake",
+      "SubCategory": "",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100000000,
+      "Description": " specifiesthe number of pixel on which to display the PLI. Maxvalue is actually the blade length"
+    },
+    {
+      "Name": "muteok",
+      "FriendlyName": "disable Mute-on-the-Go",
+      "Category": "Wake",
+      "SubCategory": "",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "Description": " disable Mute-on-the-Go"
+    },
+    {
+      "Name": "ack",
+      "FriendlyName": "disable double line feed acknowledgement of serial command",
+      "Category": "Wake",
+      "SubCategory": "",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "Description": "  to enable/disable double line feed (\n\n) as acknowledge of a successful serial command"
+    },
+    {
+      "Name": "bladecharge",
+      "FriendlyName": "Enables power drivers L1- to L4- to enable charging the battery without addon board",
+      "Category": "Wake",
+      "SubCategory": "",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "Description": "enable any of the power drivers (L1- to L4-) that are used by strip power so that the blade charge can go thru the board and charge the battery without any add-on board. If live wire option is used, browsing the OLED or accessing blade PLI will revive the drivers and will allow for charging too even if live wire prevents the powering of the drivers in other conditions"
+    },
+    {
+      "Name": "powerfail",
+      "FriendlyName": "Enables ignition restore after power shortage or else",
+      "Category": "Wake",
+      "SubCategory": "",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "Description": "Powers the saber back on after a short powerloss"
+    },
+    {
+      "Name": "skipboot",
+      "FriendlyName": "Allows to skip boot information",
+      "Category": "Wake",
+      "SubCategory": "Sleep",
+      "Type": "tribool",
+      "MinValue": 0,
+      "MaxValue": 2,
+      "ExampleValue": "0",
+      "Description": "define whether or not to display font.bmp (and play sound) during tangible font change using a crystal or a chassis accessory",
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Disabled",
+          "Description": "If the board is in deep sleep mode the board can only be awoken by the blade ignition (activator) switch."
+        },
+        {
+          "Index": 1,
+          "Option": "Skip all",
+          "Description": "skip all boot info"
+        },
+        {
+          "Index": 2,
+          "Option": "Skip during tangible",
+          "Description": "skip boot during tangible font change"
+        }
+      ]
+    },
+    {
+      "Name": "logttl",
+      "FriendlyName": "Rx TTL port strings sent to USB serial port",
+      "Category": "Wake",
+      "SubCategory": "",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "Description": "Serial communication sent to RX (like from a bluetooth module) can be monitored via USB serial connection"
+    },
+    {
+      "Name": "range-accents",
+      "FriendlyName": "Accentstrip range",
+      "Category": "Accentstrip",
+      "SubCategory": "Accentstrip-range",
+      "Type": "birange",
+      "MinValue": -600,
+      "MaxValue": 600,
+      "ExampleValue": "-2,0",
+      "Description": "define a lower and upper limit for the accentstrip parameter"
+    },
+    {
+      "Name": "range-pixies",
+      "FriendlyName": "Pixies range",
+      "Category": "Accentstrip",
+      "SubCategory": "Pixies-range",
+      "Type": "birange",
+      "MinValue": -600,
+      "MaxValue": 600,
+      "ExampleValue": "-2,0",
+      "Description": "define a lower and upper limit for the pixies parameter"
+    },
+    {
+      "Name": "quickmenu-accents",
+      "FriendlyName": "Quickmenu for accents",
+      "Category": "Accentstrip",
+      "SubCategory": "Accentstrip",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "Description": "enable or disable the top-level menu for adjusting the accents (0 = mennu disabled, 1 = enabled)"
+    },
+    {
+      "Name": "quickmenu-pixies",
+      "FriendlyName": "Quickmenu for pixies",
+      "Category": "Accentstrip",
+      "SubCategory": "Accentstrip",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "Description": "enable or disable the top-level menu for adjusting the pixies (0 = mennu disabled, 1 = enabled)"
+    }
+  ]
+}
+ 

@@ -90,6 +90,81 @@ class CFXFileHandler:
             
         return prefs
 
+    def load_master_config(self) -> Dict:
+        """Load global parameters from config.txt - everything before the first [profile=] section.
+        These apply to the whole SD card, not any single soundfont."""
+        settings = {}
+        config_path = self.root_path / "config.txt"
+
+        try:
+            if not config_path.exists():
+                return settings
+
+            with open(config_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith('[profile='):
+                        break
+                    if line and not line.startswith('//') and not line.startswith('#'):
+                        if '=' in line:
+                            key, value = line.split('=', 1)
+                            settings[key.strip()] = value.strip()
+
+        except Exception as e:
+            print(f"Error loading master config: {e}")
+
+        return settings
+
+    def save_master_config(self, settings: Dict) -> bool:
+        """Save global parameters back to the header section of config.txt (before the
+        first [profile=]), preserving comments/blank lines and leaving profile sections untouched."""
+        try:
+            config_path = self.root_path / "config.txt"
+
+            with open(config_path, 'r') as f:
+                lines = f.readlines()
+
+            new_lines = []
+            settings_added = set()
+            in_header = True
+
+            for line in lines:
+                stripped = line.strip()
+
+                if in_header and stripped.startswith('[profile='):
+                    # Add any new global settings that weren't already in the header
+                    for key, value in settings.items():
+                        if key not in settings_added:
+                            new_lines.append(f"{key}={value}\n")
+                    in_header = False
+
+                if not in_header:
+                    new_lines.append(line)
+                    continue
+
+                if not stripped or stripped.startswith('//') or stripped.startswith('#'):
+                    new_lines.append(line)
+                    continue
+
+                if '=' in stripped:
+                    key = stripped.split('=')[0].strip()
+                    if key in settings:
+                        new_lines.append(f"{key}={settings[key]}\n")
+                        settings_added.add(key)
+                    else:
+                        new_lines.append(line)
+                else:
+                    new_lines.append(line)
+
+            with open(config_path, 'w') as f:
+                f.writelines(new_lines)
+
+            return True
+
+        except Exception as e:
+            print(f"Error saving master config: {e}")
+            return False
+
     def load_blade_profile(self, profile_num: int) -> Optional[Dict]:
         """Load blade profile from config.txt"""
         try:

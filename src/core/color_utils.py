@@ -153,33 +153,39 @@ def load_color_profiles(root_path: Path) -> dict:
     
     return profiles
 
-def load_grafx_profiles(root_path: Path) -> dict:
-    """Load grafx profile names from the grafx folder."""
+def load_indexed_folder_profiles(root_path: Path, subfolder_name: str) -> dict:
+    """Load {number: name} for the indexed 'N-name' resource folders CFX uses to link a
+    blade profile to external resources - e.g. /extra/grafx (GraFx sequences), /extra/accents
+    (Accent LED configs), /extra/pixies (pixel accent configs). Same folder-naming convention
+    as soundfont folders."""
     profiles = {}
     try:
-        print(f"\nLooking for grafx folder in: {root_path}")
-        grafx_path = root_path / 'extra' / 'grafx'
-        print(f"Checking path: {grafx_path}")
-        if not grafx_path.exists():
-            print("Grafx path not found")
+        folder_path = root_path / 'extra' / subfolder_name
+        if not folder_path.exists():
             return profiles
 
-        print("Found grafx folder, checking contents:")
-        for item in grafx_path.iterdir():
-            print(f"Found item: {item.name}")
+        for item in folder_path.iterdir():
             if item.is_dir() and item.name[0].isdigit():
                 try:
-                    # Extract number and name
                     number = int(item.name.split('-')[0])
-                    name = '-'.join(item.name.split('-')[2:])
+                    name = '-'.join(item.name.split('-')[1:])
                     profiles[number] = name
-                    print(f"Added profile {number}: {name}")
                 except (ValueError, IndexError):
                     continue
 
-        print(f"Final profiles dictionary: {profiles}")
-
     except Exception as e:
-        print(f"Error loading grafx profiles: {e}")
-    
+        print(f"Error loading {subfolder_name} profiles: {e}")
+
     return profiles
+
+def load_grafx_profiles(root_path: Path) -> dict:
+    """Load grafx profile names from the grafx folder."""
+    return load_indexed_folder_profiles(root_path, 'grafx')
+
+def load_accents_profiles(root_path: Path) -> dict:
+    """Load Accent LED profile names from /extra/accents (linked via style_accents)."""
+    return load_indexed_folder_profiles(root_path, 'accents')
+
+def load_pixies_profiles(root_path: Path) -> dict:
+    """Load pixel accent profile names from /extra/pixies (linked via style_pixies)."""
+    return load_indexed_folder_profiles(root_path, 'pixies')

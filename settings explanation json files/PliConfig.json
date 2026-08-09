@@ -1,0 +1,37 @@
+{
+  "TypeConfig": "PliConfig",
+  "CfxProperties": [
+    {
+      "Name": "offsetx",
+      "FriendlyName": "Left side offset for pli",
+      "Category": "OLED",
+      "SubCategory": "General",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 128,
+      "Description": " defines the offset from the left side of the screen where the PLI scale (bars) starts"
+    },
+    {
+      "Name": "buttx",
+      "FriendlyName": "Right side offset for OLED",
+      "Category": "OLED",
+      "SubCategory": "General",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 128,
+      "Description": " defines the offset from the right side of the screen where the PLI scale (bars) stops"
+    },
+    {
+      "Name": "tetris",
+      "FriendlyName": "defines how the bars are spaced or merged together",
+      "Category": "OLED",
+      "SubCategory": "General",
+      "Type": "int",
+      "MinValue": -10,
+      "MaxValue": 10,
+      "Description": "defines the offset from the right side of the screen where the PLI scale (bars) stops"
+    }
+
+  ]
+}
+ 

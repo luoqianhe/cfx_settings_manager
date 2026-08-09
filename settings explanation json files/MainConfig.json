@@ -1,0 +1,814 @@
+{
+  "TypeConfig": "MainConfig",
+  "CfxProperties": [
+    {
+      "Name": "vol",
+      "FriendlyName": "Volume",
+      "Category": "Audio Settings",
+      "SubCategory": "Volume & Sound Behavior",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "70",
+      "Description": "digital volume setup. 0 mutes the sound output, 100 is the maximum volume.",
+      "Simple": 1
+    },
+    {
+      "Name": "menuvol",
+      "FriendlyName": "Menu volume",
+      "Category": "Audio Settings",
+      "SubCategory": "Volume & Sound Behavior",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "70",
+      "Description": "digital volume of the vocal menu.",
+      "Simple": 1
+    },
+    {
+      "Name": "beep",
+      "FriendlyName": "User interface volume",
+      "Category": "Audio Settings",
+      "SubCategory": "Volume & Sound Behavior",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "70",
+      "Description": "Sets the volume of the user interface (UI) sounds and the system beeps.",
+      "Simple": 1
+    },
+    {
+      "Name": "muteb",
+      "FriendlyName": "Mute on the boot",
+      "Category": "Audio Settings",
+      "SubCategory": "Volume & Sound Behavior",
+      "Type": "tribool",
+      "MinValue": 0,
+      "MaxValue": 3,
+      "ExampleValue": "0",
+      "Description": "Enables the mute-on-the-boot� feature which controls the volume of the boot sound with the angle of the hilt. If enabled, this feature also controls the menu volume. See the specific paragraph dedicated to this feature for more details.",
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "disabled",
+          "Description": "option is disabled (volume is defined by the vol parameter)"
+        },
+        {
+          "Index": 1,
+          "Option": "Boot sound",
+          "Description": "the orientation will control only the boot sound volume. The volume of the saber is further defined by the normal volume parameter (vol in the config.txt file)."
+        },
+        {
+          "Index": 2,
+          "Option": "Boot and regular sound",
+          "Description": "the orientation during power up controls both the volume of the boot sound and further use of the saber."
+        },
+        {
+          "Index": 3,
+          "Option": "Boot and ignitions",
+          "Description": "the orientation during power controls the volume of the boot sound. Orientation will then also control separately each activation of the saber. This allows, among various possibilities, to squeeze  boot sound while maintaining some sound volume of the saber."
+        }
+      ],
+      "Simple": 0
+    },
+    {
+      "Name": "ledstrip",
+      "FriendlyName": "Qty pixels on main blade",
+      "Category": "Blade Configuration",
+      "SubCategory": "LED Strip Setup",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 280,
+      "ExampleValue": "140",
+      "Description": "enables the ledstrip support by defining the number of pixel of the main blade. 0 leaves the board in high-power LED mode. The number of pixels accounts for just one ledstrip: a blade composed of two strips of 120 pixels back to back is defined as 120 pixels ",
+      "Simple": 1
+    },
+    {
+      "Name": "auxstrip",
+      "FriendlyName": "Qty pixels on secondary blade",
+      "Category": "Blade Configuration",
+      "SubCategory": "LED Strip Setup",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 280,
+      "ExampleValue": "0",
+      "Description": "defines the number of pixels of the secondary blade, rendered on the ledstrip output",
+      "Simple": 1
+    },
+    {
+      "Name": "accentstrip",
+      "FriendlyName": "pixel accents (sequencer)",
+      "Category": "Blade Configuration",
+      "SubCategory": "LED Strip Setup",
+      "Type": "int",
+      "MinValue": -480,
+      "MaxValue": 480,
+      "ExampleValue": "0",
+      "Description": "enables the pixel accents (sequencer). Also defined as an offset on either the main blade & strip output LS1 (> 0), or LS2 (< 0). ",
+      "Simple": 1
+    },
+    {
+      "Name": "auxaccentstrip",
+      "FriendlyName": "aux pixel accents (sequencer)",
+      "Category": "Blade Configuration",
+      "SubCategory": "LED Strip Setup",
+      "Type": "int",
+      "MinValue": -480,
+      "MaxValue": 480,
+      "ExampleValue": "114",
+      "Description": "enables the pixel accents (sequencer). Also defined as an offset on either the main blade & strip output LS1 (> 0), or LS2 (< 0). ",
+      "Simple": 0
+    },
+    {
+      "Name": "strippower",
+      "FriendlyName": "Ledstrip power channels",
+      "Category": "Blade Configuration",
+      "SubCategory": "LED Strip Setup",
+      "Type": "string",
+      "MinValue": 0,
+      "MaxValue": 0,
+      "ExampleValue": "1111",
+      "Description": "defines which channels {#1;#4} are used to control ledstrip power or leave them mirror the blade color. <br><br>Since version 10.002 of the firmware, the general configuration uses parameter strippower (bitfield) to control which of the L- driver outputs are used for powering the ledstrip and which are still mirroring the blade color channels. For instance: strippower=1110 will configure channels #1, #2 and #3 as strip (negative) power control while channel #4 remains free for mirroring the  color channel. This comes quite handy when it�s used to drive a rumbling motor or a spinning crystal chamber. <br><b>See Ledstrip blade specifics section in the manual</b>",
+      "Simple": 1
+    },
+    {
+      "Name": "masterpower",
+      "FriendlyName": "Blade power",
+      "Category": "Blade Configuration",
+      "SubCategory": "LED Strip Setup",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 100,
+      "ExampleValue": "100",
+      "Description": "Master control over the blade power in %. Allows for reducing the power bill without touching the colors themselves",
+      "Simple": 0
+    },
+    {
+      "Name": "muteoff",
+      "FriendlyName": "User interface sounds",
+      "Category": "Miscellaneous",
+      "SubCategory": "Other",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "Defines if the power-off sound will be played when the saber has Mute-onthe-Go engaged",
+      "Simple": 0
+    },
+    {
+      "Name": "plilh",
+      "FriendlyName": "Power level indicator range",
+      "Category": "Miscellaneous",
+      "SubCategory": "Other",
+      "Type": "birange",
+      "MinValue": 0,
+      "MaxValue": 10000,
+      "ExampleValue": "3400,4200",
+      "Description": "Power level indicator range in millivolts. Low and high boundaries of the PLI defining a depleted / fully charged battery. For a single li-ion cell, values likes 3400,4200 are common.",
+      "Simple": 0
+    },
+    {
+      "Name": "spectrum_mode",
+      "FriendlyName": "Color profile selection mode",
+      "Category": "Miscellaneous",
+      "SubCategory": "Other",
+      "Type": "int",
+      "MinValue": -1,
+      "MaxValue": 10,
+      "ExampleValue": "0",
+      "Description": "Spectrum (color profile selection) mode. P = navigating color profile. B = navigating blade profile. AA = Aux. + Act || AT = Aux + Twist",
+      "Options": [
+        {
+          "Index": -1,
+          "Option": "AA + AT: Spectrum disabled",
+          "Description": ""
+        },
+        {
+          "Index": 0,
+          "Option": "AA: Legacy browsing P+ || AT = Legacy browsing P+/-",
+          "Description": ""
+        },
+        {
+          "Index": 1,
+          "Option": "AA + AT = Spectrum dial",
+          "Description": ""
+        },
+        {
+          "Index": 2,
+          "Option": "AA = Legacy browsing || AT = Spectrum dial",
+          "Description": ""
+        },
+        {
+          "Index": 3,
+          "Option": "AA = Spectrum dial || AT = Legacy browsing P+/-",
+          "Description": ""
+        },
+        {
+          "Index": 4,
+          "Option": "AA = Legacy browsing P+ || AT = Kyber dial + Profiles",
+          "Description": ""
+        },
+        {
+          "Index": 5,
+          "Option": "AA = Kyber dial + Profiles || AT Legacy Browsing P+",
+          "Description": ""
+        },
+        {
+          "Index": 6,
+          "Option": "AA + AT = Kyber dial + Profiles",
+          "Description": ""
+        },
+        {
+          "Index": 7,
+          "Option": "AA = Blade Profile Browsing B+ || AT = Legacy Browsing P+/-",
+          "Description": ""
+        },
+        {
+          "Index": 8,
+          "Option": "AA = Legacy Browsing P+ || AT = Blade Profile Browsing B+/-",
+          "Description": ""
+        },
+        {
+          "Index": 9,
+          "Option": "AA = Spectrum Dial || AT = Kyber Dial + Profiles",
+          "Description": ""
+        },
+        {
+          "Index": 10,
+          "Option": "AA = Kyber Dial + Profiles || AT = Spectrum Dial",
+          "Description": ""
+        }
+      ],
+      "Simple": 0
+    },
+    {
+      "Name": "spectrum_axis",
+      "FriendlyName": "Color profile selection axis",
+      "Category": "Miscellaneous",
+      "SubCategory": "Other",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "Spectrum (color profile selection) axis. 0 is pitch (up/down), 1 is roll (throttle).",
+      "Simple": 0
+    },
+    {
+      "Name": "tridentstrip",
+      "FriendlyName": "quillons length and offset",
+      "Category": "Miscellaneous",
+      "SubCategory": "Other",
+      "Type": "int",
+      "MinValue": -280,
+      "MaxValue": 280,
+      "ExampleValue": "0",
+      "Description": "enables the trident support in ledstrip mode. Defines the quillons length and the offset at which the normal/main blade starts. Positive value will establish the quillon on the main ledstrip output LS1, negative on LS2 ",
+      "Simple": 0
+    },
+    {
+      "Name": "dragstrip",
+      "FriendlyName": "drag tip size",
+      "Category": "Miscellaneous",
+      "SubCategory": "Other",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 180,
+      "ExampleValue": "20",
+      "Description": "defines the maximum size (pixels) of the drag tip effect",
+      "Simple": 1
+    },
+    {
+      "Name": "orient",
+      "FriendlyName": "Board plane orientation",
+      "Category": "Motion Control",
+      "SubCategory": "Board Orientation & Beacon",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3,
+      "ExampleValue": "0",
+      "Description": "defines the board plane orientation in the hilt",
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Top -Front orientation",
+          "Description": "saber pointing that way =====>>>>>> USB to the left, CFX logo on top "
+        },
+        {
+          "Index": 1,
+          "Option": "Top-Rear orientation",
+          "Description": "saber pointing that way =====>>>>>> USB to the right, CFX logo on top"
+        },
+        {
+          "Index": 2,
+          "Option": "Bottom-Front orientation",
+          "Description": "saber pointing that way =====>>>>>> sd-card reader to the left, CFX logo on bottom"
+        },
+        {
+          "Index": 3,
+          "Option": "Bottom-Rear orientation",
+          "Description": "saber pointing that way =====>>>>>> sd-card reader to the left, CFX logo on top"
+        }
+      ],
+      "Simple": 0
+    },
+    {
+      "Name": "field",
+      "FriendlyName": "Reference magnetic field",
+      "Category": "Motion Control",
+      "SubCategory": "Board Orientation & Beacon",
+      "Type": "trirange",
+      "MinValue": -100000,
+      "MaxValue": 100000,
+      "ExampleValue": "10,10,10",
+      "Description": "Reference magnetic field for the Magic Activation and SaberLock. List of 3 numbers defining the neutral field. See the dedicated section related to those features further in the manual",
+      "Simple": 0
+    },
+    {
+      "Name": "gate",
+      "FriendlyName": "Motion threshold",
+      "Category": "Motion Control",
+      "SubCategory": "Thresholds & Sensitivity",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 1023,
+      "ExampleValue": "50",
+      "Description": "minimum motion quantity required to start the motion recognition engine.Base value between 15 to 70 works fine (default: 50)",
+      "Simple": 0
+    },
+    {
+      "Name": "smooth_gate",
+      "FriendlyName": "Smoothswing threshold",
+      "Category": "Motion Control",
+      "SubCategory": "Thresholds & Sensitivity",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 1023,
+      "ExampleValue": "50",
+      "Description": "minimum required to start the smoothswing engine. Usually thesame as the gate above but we added a specific parameter to it, just in case",
+      "Simple": 0
+    },
+    {
+      "Name": "hswing",
+      "FriendlyName": "swing threshold",
+      "Category": "Motion Control",
+      "SubCategory": "Thresholds & Sensitivity",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 1023,
+      "ExampleValue": "500",
+      "Description": "swing threshold",
+      "Simple": 0
+    },
+    {
+      "Name": "hslash",
+      "FriendlyName": "slash threshold",
+      "Category": "Motion Control",
+      "SubCategory": "Thresholds & Sensitivity",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 1023,
+      "ExampleValue": "400",
+      "Description": "slash threshold",
+      "Simple": 0
+    },
+    {
+      "Name": "hhybrid",
+      "FriendlyName": "Hybrid or accent swing threshold",
+      "Category": "Motion Control",
+      "SubCategory": "Thresholds & Sensitivity",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 1023,
+      "ExampleValue": "550",
+      "Description": "Hybrid or accent swing threshold when using a smoothswing font",
+      "Simple": 0
+    },
+    {
+      "Name": "hforce",
+      "FriendlyName": "threshold to trigger force fx",
+      "Category": "Motion Control",
+      "SubCategory": "Thresholds & Sensitivity",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 1023,
+      "ExampleValue": "300",
+      "Description": "threshold to trigger force fx",
+      "Simple": 0
+    },
+    {
+      "Name": "hfclash",
+      "FriendlyName": "threshold to trigger a force clash fx",
+      "Category": "Motion Control",
+      "SubCategory": "Thresholds & Sensitivity",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 1023,
+      "ExampleValue": "650",
+      "Description": "threshold to trigger a force clash fx",
+      "Simple": 0
+    },
+    {
+      "Name": "hclash",
+      "FriendlyName": "clash threshold",
+      "Category": "Motion Control",
+      "SubCategory": "Thresholds & Sensitivity",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 1023,
+      "ExampleValue": "850",
+      "Description": "clash threshold",
+      "Simple": 0
+    },
+    {
+      "Name": "hstab",
+      "FriendlyName": "stab threshold followed by angular range",
+      "Category": "Motion Control",
+      "SubCategory": "Thresholds & Sensitivity",
+      "Type": "int_bianglerange",
+      "MinValue": 0,
+      "MaxValue": 1022,
+      "ExampleValue": "500,-20,20",
+      "Description": "stab threshold followed by angular range (2 values [-90;90]) in which the stab effect can be executed",
+      "Simple": 0
+    },
+    {
+      "Name": "hspin",
+      "FriendlyName": "spin threshold",
+      "Category": "Motion Control",
+      "SubCategory": "Thresholds & Sensitivity",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 1022,
+      "ExampleValue": "1023",
+      "Description": "spin threshold",
+      "Simple": 0
+    },
+    {
+      "Name": "htwist",
+      "FriendlyName": "twist threshold",
+      "Category": "Motion Control",
+      "SubCategory": "Thresholds & Sensitivity",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 1023,
+      "ExampleValue": "350",
+      "Description": "twist threshold",
+      "Simple": 0
+    },
+    {
+      "Name": "htemp",
+      "FriendlyName": "temperature threshold",
+      "Category": "Motion Control",
+      "SubCategory": "Thresholds & Sensitivity",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 200,
+      "ExampleValue": "70",
+      "Description": "the temperature threshold. (not a gesture/motion parameter but hosted with the other thresholds)",
+      "Simple": 0
+    },
+    {
+      "Name": "hdrag",
+      "FriendlyName": "drag threshold followed by the angular range",
+      "Category": "Motion Control",
+      "SubCategory": "Thresholds & Sensitivity",
+      "Type": "int_bianglerange",
+      "MinValue": 0,
+      "MaxValue": 1023,
+      "ExampleValue": "500,-90,0",
+      "Description": "",
+      "Simple": 0
+    },
+    {
+      "Name": "swing_flow",
+      "FriendlyName": "Swing rate flow limiter",
+      "Category": "Motion Control",
+      "SubCategory": "Thresholds & Sensitivity",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 2000,
+      "ExampleValue": "360",
+      "Description": "swing rate flow limiter. Delay during which swings cannot be furthermore triggered. ",
+      "Simple": 0
+    },
+    {
+      "Name": "clash_flow",
+      "FriendlyName": "clash rate flow limiter",
+      "Category": "Motion Control",
+      "SubCategory": "Thresholds & Sensitivity",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 2000,
+      "ExampleValue": "300",
+      "Description": "swing rate flow limiter. Delay during which clashes cannot be furthermore triggered. ",
+      "Simple": 0
+    },
+    {
+      "Name": "spin_flow",
+      "FriendlyName": "spin rate flow limiter",
+      "Category": "Motion Control",
+      "SubCategory": "Thresholds & Sensitivity",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 2000,
+      "ExampleValue": "400",
+      "Description": "spin rate flow limiter. Delay during which spins cannot be furthermore triggered. ",
+      "Simple": 0
+    },
+    {
+      "Name": "smooth_flow",
+      "FriendlyName": "smoothswing rate flow limiter",
+      "Category": "Motion Control",
+      "SubCategory": "Thresholds & Sensitivity",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 2000,
+      "ExampleValue": "1000",
+      "Description": "smoothswing rate flow limiter. Delay during which a smoothswing pair change cannot be furthermore triggered. ",
+      "Simple": 0
+    },
+    {
+      "Name": "lockup",
+      "FriendlyName": "Lockup trigger delay duration",
+      "Category": "Motion Control",
+      "SubCategory": "Thresholds & Sensitivity",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 2000,
+      "ExampleValue": "300",
+      "Description": " our module features an auxiliary switch to trigger additional sound/visual effects. A short pressure on the switch generates the blaster effect (the saber blade stops a blaster ray), plays one of the blaster sounds. A longer pressure (maintained) triggers a blade lockup effect: while the switch is pressed, the sound lockup.wav is played in loop with some shimmering applied to the high-power LED. The parameter lockup specifies the duration of the delay before triggering the lockup effect. A short value (100 to 200) will trigger the effect almost immediately: to trigger a blaster effect, the user will have to release the button quickly. Conversely, a higher value will leave more time to produce a blaster blocking feature",
+      "Simple": 0
+    },
+    {
+      "Name": "switch",
+      "FriendlyName": "Activation switch mode",
+      "Category": "Power Management",
+      "SubCategory": "Ignition & Retraction",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3,
+      "ExampleValue": "2",
+      "Description": "selects if the saber is activated by a normally-open or a normally-closed switch. Other switches might simply have an �inverted� logic (normally closed contact). When switch is set to 1, the saber lights up when the electrical contact of the switch is closed and conversely when switch is set to 0. We recommend to use a momentary switch for the blade activation, (set switch to 2). Finally, the board also supports single switch with option 3.",
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Ignite on closed",
+          "Description": "the saber lights up when the electrical contact of the switch is closed"
+        },
+        {
+          "Index": 1,
+          "Option": "Ignite on open",
+          "Description": "the saber lights up when the electrical contact of the switch is open"
+        },
+        {
+          "Index": 2,
+          "Option": "Momentary (recommended)",
+          "Description": "the saber lights up when by activating the switch for a while"
+        },
+        {
+          "Index": 3,
+          "Option": "Single switch",
+          "Description": ""
+        }
+      ],
+      "Simple": 0
+    },
+    {
+      "Name": "offp",
+      "FriendlyName": "Power off Protection",
+      "Category": "Power Management",
+      "SubCategory": "Ignition & Retraction",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "To avoid accidentally powering off the saber, especially when using a momentary button for activation, we added a power off protection. When this parameter is set to 1, the user must press the activation button and confirm with the auxiliary button. It is not necessary to press both buttons at the same time, keep the activation switch pressed first, then press the auxiliary switch: the blade goes off.",
+      "Simple": 0
+    },
+    {
+      "Name": "offd",
+      "FriendlyName": "Power off delay",
+      "Category": "Power Management",
+      "SubCategory": "Ignition & Retraction",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 10000,
+      "ExampleValue": "200",
+      "Description": "power-off delay. An alternative to A-POP� defining how long the user must press the activation switch before the blade goes off. Values from 100 to 500 ms are relevant and very efficient for just ensuring the saber won't be turned off accidentally. Set to zero if you use an anti-power off protection with parameter offp",
+      "Simple": 0
+    },
+    {
+      "Name": "onp",
+      "FriendlyName": "Power on Protection",
+      "Category": "Power Management",
+      "SubCategory": "Ignition & Retraction",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "If the parameter is set to 1, you must press the aux. button after pressing / cycling the activation switch in order to ignite the blade",
+      "Simple": 0
+    },
+    {
+      "Name": "ond",
+      "FriendlyName": "Power on Delay",
+      "Category": "Power Management",
+      "SubCategory": "Ignition & Retraction",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 10000,
+      "ExampleValue": "20",
+      "Description": "This parameter is also used as a time base for the double click event. Value of 20 to 50ms are relevant",
+      "Simple": 0
+    },
+    {
+      "Name": "sleep",
+      "FriendlyName": "Sleep timer length",
+      "Category": "Power Management",
+      "SubCategory": "Sleep Timers",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 3600000,
+      "ExampleValue": "50000",
+      "Description": " defines the time after which the sound board will move into sleep mode, turning the idle accent sequence off and saving some current. Parameter expressed in multiple of 1ms; 300,000 equates 300 seconds or 5 minutes. 0 to disable.",
+      "Simple": 1
+    },
+    {
+      "Name": "deep",
+      "FriendlyName": "Deep sleep timer length",
+      "Category": "Power Management",
+      "SubCategory": "Sleep Timers",
+      "Type": "int",
+      "MinValue": 0,
+      "ExampleValue": "50000",
+      "MaxValue": 3600000,
+      "Description": "defines the time after which the sound board will move into deep sleep mode for saving power (<0.25 mA). Same as above. The deep sleep counter starts after the sleep mode has engaged. Sleep and Deep Sleep durations are cumulative. ",
+      "Simple": 1
+    },
+    {
+      "Name": "qkignite",
+      "FriendlyName": "Ignite from sleep",
+      "Category": "Power Management",
+      "SubCategory": "Sleep Timers",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "enables igniting the blade right after waking up from deep sleep. The saber will boot normally but will skip the boot sound and will power the blade up",
+      "Simple": 0
+    },
+    {
+      "Name": "debug",
+      "FriendlyName": "Debug",
+      "Category": "System Settings",
+      "SubCategory": "Debugging & Logging",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "enables the board debug which outputs extensive logs of the board activity such as configuration files parsing, sounds selected and played or file lookup. Debug should be enabled only when troubleshooting the board as the very verbose log will slow down the boot time. Also, it is recommended to turn debug off when configuring the board with RICE to avoid a verbose echo from the board to the computer each time a parameter is changed.",
+      "Options": null,
+      "Simple": 0
+    },
+    {
+      "Name": "logport",
+      "FriendlyName": "Logging port",
+      "Category": "System Settings",
+      "SubCategory": "Debugging & Logging",
+      "Type": "tribool",
+      "MinValue": 0,
+      "MaxValue": 2,
+      "ExampleValue": "0",
+      "Description": "defines where the debug / logged information is sent. 0 is the USB serial port, 1 is the TTL (legacy RICE) serial port, 2 sends to both. Set to 1 or 2 if you want to use the legacy RICE or a Bluetooth module.",
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "USB",
+          "Description": "Log data is only sent to USB port"
+        },
+        {
+          "Index": 1,
+          "Option": "TTL",
+          "Description": "Log data is only sent to TTL (legacy RICE) serial port"
+        },
+        {
+          "Index": 2,
+          "Option": "USB and TTL",
+          "Description": "Log data is sent to both USB and TTL"
+        },
+        {
+          "Index": 3,
+          "Option": "WebUSB",
+          "Description": "Log data is sent to WebUSB"
+        },
+        {
+          "Index": 4,
+          "Option": "All",
+          "Description": "All serial ports"
+        }
+      ],
+      "Simple": 0
+    },
+    {
+      "Name": "trackgest",
+      "FriendlyName": "Activator track selection",
+      "Category": "User Interface",
+      "SubCategory": "Menu & Navigation",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "Enables the track selection by pressing the activator and twisting the hilt (if the font has local tracks or while in iSaber mode).",
+      "Simple": 0
+    },
+    {
+      "Name": "fontgest",
+      "FriendlyName": "Activator font selection",
+      "Category": "User Interface",
+      "SubCategory": "Menu & Navigation",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "Enables loading the next font by pressing the activator and clashing the blade. If set to 0, while in single switch mode (switch=3) and using a ledstrip blade, that same action will toggle the blade PLI on/off",
+      "Simple": 0
+    },
+    {
+      "Name": "menugest",
+      "FriendlyName": "Menu gestures",
+      "Category": "User Interface",
+      "SubCategory": "Menu & Navigation",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "Enables the use of saber motions to browse or select options while in the vocal menu: twist the hilt left/right moves to the previous/next bank and a bang will validate the currently selected font.",
+      "Simple": 0
+    },
+    {
+      "Name": "valsnd",
+      "FriendlyName": "Repeat fontsound after selection",
+      "Category": "User Interface",
+      "SubCategory": "Menu & Navigation",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "enables or disables the repeat of the selected soundbank description sound in the vocal menu (font.wav) after selecting it. When disabled, it saves time in the selection process. Also, when disabled, the aux. switch confirmation process for rebooting the saber is disabled (see �rebooting the saber� paragraph).",
+      "Simple": 0
+    },
+    {
+      "Name": "loop",
+      "FriendlyName": "Loop or not",
+      "Category": "User Interface",
+      "SubCategory": "iSaber Audio Player",
+      "Type": "bool",
+      "MinValue": 0,
+      "MaxValue": 1,
+      "ExampleValue": "0",
+      "Description": "iSaber (audio player) parameter defining if the current track plays endlessly or if it the player will fetch another track once it ends.",
+      "Simple": 0
+    },
+    {
+      "Name": "shuffle",
+      "FriendlyName": "Shuffle",
+      "Category": "User Interface",
+      "SubCategory": "iSaber Audio Player",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 2,
+      "ExampleValue": "2",
+      "Description": "iSaber (audio player) track random selection parameter (refer to sound selection modes for more details)",
+      "Options": [
+        {
+          "Index": 0,
+          "Option": "Random play",
+          "Description": "the sound is randomly chosen in the available slots."
+        },
+        {
+          "Index": 1,
+          "Option": "In sequence",
+          "Description": "the sound is played in sequence. (slot 1, then 2 etc.)"
+        },
+        {
+          "Index": 2,
+          "Option": "No recurring",
+          "Description": "the sound is randomly chosen without triggering the same sound twice in a row."
+        }
+      ],
+      "Simple": 0
+    },
+    {
+      "Name": "omnisense",
+      "FriendlyName": "Omnisabers beaconing period",
+      "Category": "User Interface",
+      "SubCategory": "iSaber Audio Player",
+      "Type": "int",
+      "MinValue": 0,
+      "MaxValue": 65000,
+      "ExampleValue": "2000",
+      "Description": "beaconing period of Omnisabers, in ms. Used when Omnisabers is enabled. 0 disables beaconing. Beaconing will prevent the board from entering deep sleep in most cases as it keeps the board active (expected when using Omnisabers).",
+      "Simple": 0
+    }
+  ]
+}
