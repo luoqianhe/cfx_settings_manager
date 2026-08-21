@@ -37,6 +37,10 @@ def _build_light_palette() -> QtGui.QPalette:
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
+    # Needed for QSettings() (no explicit path) to have a stable place to persist things
+    # like the user's selected CFX manual PDF path across runs.
+    app.setOrganizationName("CFXSettingsManager")
+    app.setApplicationName("CFXSettingsManager")
     app.setStyle("Fusion")
     app.setPalette(_build_light_palette())
     window = MainWindow()

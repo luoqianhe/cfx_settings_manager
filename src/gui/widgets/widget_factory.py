@@ -5,9 +5,11 @@ from PySide6.QtWidgets import QWidget
 
 # range_pair params whose two values are independent quantities, not a min/max range - e.g.
 # lbolt is (distance from bottom, distance from top), which has no reason to be ordered.
-# Confirmed against the RICE schema descriptions: every other range_pair param explicitly
-# documents "min and max"/"low and high"/"lower and upper" semantics; lbolt does not.
-UNORDERED_RANGE_PAIR_PARAMS = {'lbolt'}
+# Confirmed against the manual's parameter descriptions: every other range_pair param
+# explicitly documents "min and max"/"low and high"/"lower and upper" semantics; lbolt
+# doesn't, and neither do mapping_move/mapping_audio ("range used for mapping X to the fx") -
+# for those a reversed pair inverts the mapping curve rather than being invalid data.
+UNORDERED_RANGE_PAIR_PARAMS = {'lbolt', 'mapping_move', 'mapping_audio'}
 
 def set_widget_value(widget, display_type, value, param_name=None) -> bool:
     """Push a loaded value into a widget created by this module.
@@ -262,56 +264,85 @@ def create_range_pair_widget(param_name, param_def):
     return container, (min_spin, max_spin)
 
 def create_color_picker_widget(param_name, param_def):
+    """Build a color_picker widget. The RGBW preview swatch (widget[1]) is returned
+    un-parented - callers (settings_grid) place it wherever makes sense (e.g. next to the
+    parameter name) rather than inside `container`. The R/G/B/W sliders live inside
+    `container` behind a collapsed-by-default toggle, since they take a lot of vertical
+    space and are only needed when actually adjusting the color."""
     container = QtWidgets.QWidget()
     layout = QtWidgets.QVBoxLayout(container)
+    layout.setContentsMargins(0, 0, 0, 0)
 
     color_inputs = {}
+
     preview = QtWidgets.QFrame()
-    preview.setMinimumHeight(50)
-    preview.setStyleSheet("background-color: rgb(0, 0, 0);")
+    preview.setFixedSize(28, 28)
+    # Explicit black border - without it, a pure-white color is invisible against a
+    # white/light window background.
+    preview.setStyleSheet("background-color: rgb(0, 0, 0); border: 1px solid black;")
 
     def update_color_preview():
         r = color_inputs['R'][0].value() * 255 // 1023
         g = color_inputs['G'][0].value() * 255 // 1023
         b = color_inputs['B'][0].value() * 255 // 1023
         w = color_inputs['W'][0].value() * 255 // 1023
-        
+
         # Apply white value to increase brightness
         r = min(255, r + w)
         g = min(255, g + w)
         b = min(255, b + w)
-        
-        preview.setStyleSheet(f"background-color: rgb({r}, {g}, {b});")
+
+        preview.setStyleSheet(f"background-color: rgb({r}, {g}, {b}); border: 1px solid black;")
+
+    toggle_button = QtWidgets.QToolButton()
+    toggle_button.setArrowType(QtCore.Qt.RightArrow)
+    toggle_button.setCheckable(True)
+    toggle_button.setChecked(False)
+    toggle_button.setAutoRaise(True)
+    toggle_button.setText("Adjust RGBW values")
+    toggle_button.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
+    toggle_button.setStyleSheet("QToolButton { border: none; font-size: 11px; color: #666666; }")
+
+    sliders_container = QtWidgets.QWidget()
+    sliders_layout = QtWidgets.QVBoxLayout(sliders_container)
+    sliders_layout.setContentsMargins(0, 4, 0, 0)
+    sliders_container.setVisible(False)  # hidden by default
+
+    def on_toggled(checked):
+        sliders_container.setVisible(checked)
+        toggle_button.setArrowType(QtCore.Qt.DownArrow if checked else QtCore.Qt.RightArrow)
+    toggle_button.toggled.connect(on_toggled)
 
     for channel in ['Red', 'Green', 'Blue', 'White']:
         channel_widget = QtWidgets.QWidget()
         channel_layout = QtWidgets.QHBoxLayout(channel_widget)
         channel_layout.setContentsMargins(2, 2, 2, 2)
-        
+
         label = QtWidgets.QLabel(channel)
         label.setMinimumWidth(50)
         label.setMinimumHeight(25)
-        
+
         slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
         slider.setRange(0, 1023)
-        
+
         spin = QtWidgets.QSpinBox()
         spin.setRange(0, 1023)
-        
+
         color_inputs[channel[0]] = (slider, spin)
-        
+
         slider.valueChanged.connect(spin.setValue)
         spin.valueChanged.connect(slider.setValue)
         slider.valueChanged.connect(update_color_preview)  # Add this connection
-        
+
         channel_layout.addWidget(label)
         channel_layout.addWidget(slider)
         channel_layout.addWidget(spin)
-        
-        layout.addWidget(channel_widget)
 
-    layout.addWidget(preview)
-    
+        sliders_layout.addWidget(channel_widget)
+
+    layout.addWidget(toggle_button)
+    layout.addWidget(sliders_container)
+
     return container, (color_inputs, preview)
 
 def create_triple_range_widget(param_name, param_def):
@@ -478,18 +509,76 @@ def create_color_profile_dropdown(param_name, param_def, main_window=None):
     container = QtWidgets.QWidget()
     layout = QtWidgets.QVBoxLayout(container)
     layout.setContentsMargins(4, 4, 4, 4)
-    
+
     combo = QtWidgets.QComboBox()
-    
+
     # Add special "-1" option
     combo.addItem("Default (-1)", "-1")
-    
+
     # Add color profiles with names if available
     if main_window and hasattr(main_window, 'color_profiles'):
         for profile_num in sorted(main_window.color_profiles.keys()):
             profile = main_window.color_profiles.get(profile_num, {})
             color_name = profile.get('color_name', 'Unknown')
             combo.addItem(f"Color {profile_num} ({color_name})", str(profile_num))
-    
+
     layout.addWidget(combo)
     return container, combo
+
+
+def create_rgb_picker_widget(label: str, initial_rgb=(255, 255, 255)):
+    """A plain 0-255 RGB picker: three slider+spinbox rows plus a bordered swatch preview.
+    Used by the GraFx Creator wizard for preset colors - GraFx BMP pixels are literal RGB,
+    unlike the RGBW (0-1023) format create_color_picker_widget builds for font_config.txt
+    color params, so this is a separate, simpler widget rather than a shared one.
+
+    Returns (container, (r_spin, g_spin, b_spin, swatch))."""
+    container = QtWidgets.QWidget()
+    layout = QtWidgets.QVBoxLayout(container)
+    layout.setContentsMargins(0, 0, 0, 0)
+
+    if label:
+        title = QtWidgets.QLabel(label)
+        title.setStyleSheet("font-weight: bold;")
+        layout.addWidget(title)
+
+    swatch = QtWidgets.QFrame()
+    swatch.setFixedSize(28, 28)
+
+    spins = {}
+
+    def update_swatch():
+        r, g, b = (spins[c].value() for c in 'RGB')
+        swatch.setStyleSheet(f"background-color: rgb({r}, {g}, {b}); border: 1px solid black;")
+
+    for channel, initial in zip('RGB', initial_rgb):
+        row = QtWidgets.QWidget()
+        row_layout = QtWidgets.QHBoxLayout(row)
+        row_layout.setContentsMargins(2, 2, 2, 2)
+
+        channel_label = QtWidgets.QLabel(channel)
+        channel_label.setMinimumWidth(20)
+
+        slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        slider.setRange(0, 255)
+        slider.setValue(initial)
+
+        spin = QtWidgets.QSpinBox()
+        spin.setRange(0, 255)
+        spin.setValue(initial)
+
+        slider.valueChanged.connect(spin.setValue)
+        spin.valueChanged.connect(slider.setValue)
+        spin.valueChanged.connect(update_swatch)
+
+        spins[channel] = spin
+
+        row_layout.addWidget(channel_label)
+        row_layout.addWidget(slider)
+        row_layout.addWidget(spin)
+        layout.addWidget(row)
+
+    layout.addWidget(swatch)
+    update_swatch()
+
+    return container, (spins['R'], spins['G'], spins['B'], swatch)

@@ -1,6 +1,8 @@
 # src/gui/main_window.py
 from PySide6 import QtWidgets, QtCore, QtGui
 from pathlib import Path
+import shutil
+from datetime import datetime
 from core.validators import CFXValidator
 from core.file_handler import CFXFileHandler
 from gui.widgets.widget_factory import (
@@ -22,16 +24,23 @@ from PySide6.QtCore import Qt
 from gui.widgets.settings_grid import SettingsGrid
 from gui.widgets.blade_preview import BladePreviewWidget
 from gui.validation_report_dialog import ValidationReportDialog
+from core.sound_player import SoundPlayer
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.folder_path = None
         self.file_handler = None
+        self.backup_path = None  # optional; None means "no backup configured"
+        self.current_font_path = None  # the selected font's folder, for sound lookups
+        self.sound_player = SoundPlayer(self)
         self.color_profiles = {}
         self.grafx_profiles = {}
+        self.grafx_profile_paths = {}
         self.accents_profiles = {}
         self.pixies_profiles = {}
+        self.validation_report = None
+        self.font_validation_by_path = {}  # str(font_path) -> font_report, for fonts with issues
         self.setWindowTitle("CFX Settings Manager")
         self.setMinimumSize(1024, 768)
         self.resize(1175, 900)
@@ -75,6 +84,7 @@ class MainWindow(QtWidgets.QMainWindow):
         
         # Add Select Font Folder button
         select_folder_button = QtWidgets.QPushButton("Select Root CFX Folder")
+        select_folder_button.setFixedWidth(250)  # match the Soundfont Folders section below
         select_folder_button.setStyleSheet("""
             QPushButton {
                 background-color: #4A90E2;
@@ -90,22 +100,11 @@ class MainWindow(QtWidgets.QMainWindow):
         select_folder_button.clicked.connect(self.prompt_for_folder)
         left_layout.addWidget(select_folder_button)
 
-        # Validate All button
-        validate_all_button = QtWidgets.QPushButton("Validate All Soundfonts")
-        validate_all_button.setStyleSheet("""
-            QPushButton {
-                background-color: #6c757d;
-                color: white;
-                padding: 6px;
-                border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #565e64;
-            }
-        """)
-        validate_all_button.clicked.connect(self.validate_all_fonts)
-        left_layout.addWidget(validate_all_button)
+        # Opens the GraFx Creator wizard - only meaningful once a CFX folder is loaded
+        grafx_creator_button = QtWidgets.QPushButton("Create GraFx Resource...")
+        grafx_creator_button.setFixedWidth(250)  # match the Soundfont Folders section below
+        grafx_creator_button.clicked.connect(self.open_grafx_creator)
+        left_layout.addWidget(grafx_creator_button)
 
         # Soundfont header
         header_label = QtWidgets.QLabel("Soundfont Folders")
@@ -142,35 +141,52 @@ class MainWindow(QtWidgets.QMainWindow):
         left_layout.addWidget(preview_header)
 
         self.blade_preview = BladePreviewWidget()
+        self.blade_preview.setFixedWidth(250)  # match the Soundfont Folders section above
+        self.blade_preview.ignited.connect(self._on_blade_ignited)
+        self.blade_preview.preon_started.connect(self._on_preon_started)
+        self.blade_preview.poweron_started.connect(self._on_poweron_started)
+        self.blade_preview.postoff_started.connect(self._on_postoff_started)
         left_layout.addWidget(self.blade_preview)
 
         preview_controls = QtWidgets.QWidget()
+        preview_controls.setFixedWidth(250)  # match the Soundfont Folders section above
         preview_controls_layout = QtWidgets.QHBoxLayout(preview_controls)
         preview_controls_layout.setContentsMargins(0, 4, 0, 0)
 
         ignite_button = QtWidgets.QPushButton("Ignite")
-        ignite_button.clicked.connect(self.blade_preview.ignite)
+        ignite_button.clicked.connect(self._on_ignite_clicked)
         retract_button = QtWidgets.QPushButton("Retract")
-        retract_button.clicked.connect(self.blade_preview.retract)
+        retract_button.clicked.connect(self._on_retract_clicked)
 
-        preview_controls_layout.addWidget(ignite_button)
-        preview_controls_layout.addWidget(retract_button)
+        preview_controls_layout.addWidget(ignite_button, stretch=1)
+        preview_controls_layout.addWidget(retract_button, stretch=1)
         left_layout.addWidget(preview_controls)
 
         reaction_controls = QtWidgets.QWidget()
+        reaction_controls.setFixedWidth(250)  # match the Soundfont Folders section above
         reaction_controls_layout = QtWidgets.QHBoxLayout(reaction_controls)
         reaction_controls_layout.setContentsMargins(0, 4, 0, 0)
 
         clash_button = QtWidgets.QPushButton("Clash")
-        clash_button.clicked.connect(self.blade_preview.clash)
-        lockup_button = QtWidgets.QPushButton("Lockup")
-        lockup_button.setCheckable(True)
-        lockup_button.clicked.connect(
-            lambda: lockup_button.setChecked(self.blade_preview.toggle_lockup())
-        )
+        clash_button.clicked.connect(self._on_clash_clicked)
+        self.lockup_button = QtWidgets.QPushButton("Lockup")
+        self.lockup_button.setCheckable(True)
+        self.lockup_button.clicked.connect(self._on_lockup_clicked)
+        blaster_button = QtWidgets.QPushButton("Blaster Block")
+        blaster_button.clicked.connect(self._on_blaster_clicked)
+
+        # Explicit fixed widths rather than layout stretch factors - with the row's total
+        # width fixed at 250 and all three buttons' preferred sizes together exceeding that,
+        # QHBoxLayout's stretch-based distribution shrinks the higher-stretch (Blaster Block)
+        # widget *more*, not less, which is the opposite of what's wanted here. 60+60+118 plus
+        # the row's two 6px inter-widget gaps fills the 250px row exactly.
+        clash_button.setFixedWidth(60)
+        self.lockup_button.setFixedWidth(60)
+        blaster_button.setFixedWidth(118)
 
         reaction_controls_layout.addWidget(clash_button)
-        reaction_controls_layout.addWidget(lockup_button)
+        reaction_controls_layout.addWidget(self.lockup_button)
+        reaction_controls_layout.addWidget(blaster_button)
         left_layout.addWidget(reaction_controls)
 
         layout.addWidget(left_container, stretch=1)
@@ -191,13 +207,24 @@ class MainWindow(QtWidgets.QMainWindow):
         dropdown_layout = QtWidgets.QHBoxLayout(dropdown_row)
         dropdown_layout.setContentsMargins(0, 0, 0, 0)
 
+        # Narrow enough that both dropdowns, their labels, and the Save button all fit
+        # side by side without overlapping even at the window's minimum size (1024px wide).
+        DROPDOWN_WIDTH = 150
+
         dropdown_label = QtWidgets.QLabel("Jump to Section:")
         self.category_dropdown = QtWidgets.QComboBox()
-        self.category_dropdown.setFixedWidth(300)
+        self.category_dropdown.setFixedWidth(DROPDOWN_WIDTH)
         self.category_dropdown.currentTextChanged.connect(self.scroll_to_category)
+
+        param_dropdown_label = QtWidgets.QLabel("Jump to Parameter:")
+        self.param_dropdown = QtWidgets.QComboBox()
+        self.param_dropdown.setFixedWidth(DROPDOWN_WIDTH)
+        self.param_dropdown.currentTextChanged.connect(self.scroll_to_parameter)
 
         dropdown_layout.addWidget(dropdown_label)
         dropdown_layout.addWidget(self.category_dropdown)
+        dropdown_layout.addWidget(param_dropdown_label)
+        dropdown_layout.addWidget(self.param_dropdown)
         dropdown_layout.addStretch()
 
         # Save button
@@ -217,44 +244,46 @@ class MainWindow(QtWidgets.QMainWindow):
         save_button.clicked.connect(self.save_changes)
         dropdown_layout.addWidget(save_button)
 
-        # Header row with expandable columns
-        header_row = QtWidgets.QWidget()
-        header_layout = QtWidgets.QHBoxLayout(header_row)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(0)
+        # Sticky section-header bar: mirrors whichever category header ("Blade and Color
+        # Profiles", "Battle Fx", etc.) is currently scrolled to the top of the settings
+        # grid below, so it - and its "shared parameters"/help-triangle hints - stay visible
+        # no matter how far the user has scrolled, instead of a static column-name row.
+        sticky_header_row = QtWidgets.QWidget()
+        sticky_header_row.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ddd;")
+        sticky_header_layout = QtWidgets.QHBoxLayout(sticky_header_row)
+        sticky_header_layout.setContentsMargins(8, 4, 8, 4)
+        sticky_header_row.setMinimumHeight(30)
 
-        # Create headers
-        param_header = QtWidgets.QLabel("Parameter")
-        value_header = QtWidgets.QLabel("Value")
-        notes_header = QtWidgets.QLabel("Notes")
-
-        # Style for headers
-        header_style = """
+        self.sticky_category_label = QtWidgets.QLabel("")
+        self.sticky_category_label.setStyleSheet("""
             font-weight: bold;
             font-size: 14px;
-            padding: 4px;
-            background-color: #f0f0f0;
-            border: 1px solid #ddd;
-        """
+            color: #4A90E2;
+        """)
+        self.sticky_hint_label = QtWidgets.QLabel("Click the triangle next to each parameter for help")
+        self.sticky_hint_label.setStyleSheet("""
+            color: #888888;
+            font-style: italic;
+            font-size: 11px;
+            padding-left: 20px;
+        """)
+        self.sticky_shared_warning_label = QtWidgets.QLabel(
+            "Highlighted parameters are used by multiple soundfonts")
+        self.sticky_shared_warning_label.setStyleSheet("""
+            color: #8a6d00;
+            font-style: italic;
+            padding-left: 20px;
+        """)
+        self.sticky_shared_warning_label.setVisible(False)
 
-        for header in [param_header, value_header, notes_header]:
-            header.setStyleSheet(header_style)
-            header.setMinimumHeight(30)
-            header.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        sticky_header_layout.addWidget(self.sticky_category_label)
+        sticky_header_layout.addWidget(self.sticky_hint_label)
+        sticky_header_layout.addWidget(self.sticky_shared_warning_label)
+        sticky_header_layout.addStretch()
 
-        # Set initial minimum widths
-        param_header.setMinimumWidth(200)
-        value_header.setMinimumWidth(250)
-        notes_header.setMinimumWidth(300)
-
-        # Add headers to layout with stretch factors
-        header_layout.addWidget(param_header, 1)
-        header_layout.addWidget(value_header, 2)
-        header_layout.addWidget(notes_header, 2)
-
-        # Add dropdown and headers to top section
+        # Add dropdown and the sticky header bar to top section
         top_layout.addWidget(dropdown_row)
-        top_layout.addWidget(header_row)
+        top_layout.addWidget(sticky_header_row)
 
         # Scroll area for content
         scroll_area = QtWidgets.QScrollArea()
@@ -274,20 +303,103 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         settings_layout.addWidget(self.settings_grid)
 
+        scroll_area.verticalScrollBar().valueChanged.connect(self._update_sticky_category_header)
+
+        # Placeholder shown instead of the settings grid once a folder is loaded but before
+        # any soundfont has been selected from the left pane.
+        self.settings_scroll_area = scroll_area
+        self.no_font_placeholder = QtWidgets.QLabel("Please select a soundfont from the left pane.")
+        self.no_font_placeholder.setAlignment(QtCore.Qt.AlignCenter)
+        self.no_font_placeholder.setStyleSheet("color: #888888; font-size: 16px; padding: 40px;")
+
+        self.right_content_stack = QtWidgets.QStackedWidget()
+        self.right_content_stack.addWidget(scroll_area)
+        self.right_content_stack.addWidget(self.no_font_placeholder)
+
         # Add everything to right side
         right_layout.addWidget(top_section)  # Fixed top section
         scroll_area.setWidget(settings_container)
-        right_layout.addWidget(scroll_area)
+        right_layout.addWidget(self.right_content_stack)
 
         layout.addWidget(right_container, stretch=3)
    
+    def _update_sticky_category_header(self, *_args):
+        """Keep the sticky header bar in sync with whichever category is currently scrolled
+        to the top of the settings grid - connected to the scroll area's scrollbar, and also
+        called right after the grid is rebuilt (e.g. a new font is selected), since category
+        positions shift even when the scroll value itself doesn't change."""
+        scroll_value = self.settings_scroll_area.verticalScrollBar().value()
+        category = self.settings_grid.category_at_scroll_position(scroll_value)
+        self.sticky_category_label.setText(category or "")
+        self.sticky_shared_warning_label.setVisible(
+            bool(category and self.settings_grid.category_has_shared_params.get(category))
+        )
+
     def scroll_to_category(self, category: str):
         """Scroll to the selected category"""
         if not category or category == "Jump to section...":
             return
-            
+
         # Ask the settings grid to scroll to the category
         self.settings_grid.scroll_to_category(category)
+
+    def scroll_to_parameter(self, param_name: str):
+        """Scroll to the selected parameter"""
+        if not param_name or param_name == "Jump to parameter...":
+            return
+
+        self.settings_grid.scroll_to_parameter(param_name)
+
+    def _on_ignite_clicked(self):
+        # Don't play poweron here - if a Pre-On phase is about to run, poweron sound has to
+        # wait for it to finish (see _on_preon_started/_on_poweron_started below); playing it
+        # immediately would step on the preon sound and start it at the wrong moment anyway.
+        self.blade_preview.ignite()
+
+    def _on_preon_started(self):
+        """Fires from BladePreviewWidget.preon_started - a Pre-On phase just began."""
+        self.sound_player.play_one_shot(self.current_font_path, 'preon')
+
+    def _on_poweron_started(self):
+        """Fires from BladePreviewWidget.poweron_started - the poweron animation just began,
+        either immediately (no Pre-On phase configured) or right after Pre-On finished."""
+        self.sound_player.play_one_shot(self.current_font_path, 'poweron')
+
+    def _on_blade_ignited(self):
+        """Fires from BladePreviewWidget.ignited - the exact moment the blade finishes
+        igniting, which can take longer than qon_ms alone (a Pre-On phase runs first, or a
+        GraFx-driven poweron paces itself by its own delay), so hum starts here rather than
+        after a guessed timeout."""
+        self.sound_player.start_loop('hum', self.current_font_path, 'humM')
+
+    def _on_retract_clicked(self):
+        self.sound_player.stop_loop('hum')
+        self.sound_player.stop_loop('lockup')
+        # Unlike poweron/preon, poweroff always plays right away here - postoff (if any) runs
+        # after retraction finishes, not before, so it can't collide with this sound.
+        self.sound_player.play_one_shot(self.current_font_path, 'poweroff')
+        self.blade_preview.retract()
+
+    def _on_postoff_started(self):
+        """Fires from BladePreviewWidget.postoff_started - a Post-Off phase just began, once
+        retraction (and its poweroff sound) has fully finished."""
+        self.sound_player.play_one_shot(self.current_font_path, 'pstoff')
+
+    def _on_clash_clicked(self):
+        self.sound_player.play_one_shot(self.current_font_path, 'clash')
+        self.blade_preview.clash()
+
+    def _on_lockup_clicked(self):
+        engaged = self.blade_preview.toggle_lockup()
+        self.lockup_button.setChecked(engaged)
+        if engaged:
+            self.sound_player.start_loop('lockup', self.current_font_path, 'lockup')
+        else:
+            self.sound_player.stop_loop('lockup')
+
+    def _on_blaster_clicked(self):
+        self.sound_player.play_one_shot(self.current_font_path, 'blaster')
+        self.blade_preview.blaster_deflect()
 
     def prompt_for_folder(self):
        folder = QtWidgets.QFileDialog.getExistingDirectory(
@@ -295,12 +407,97 @@ class MainWindow(QtWidgets.QMainWindow):
            "Select CFX Root Folder"
        )
        if folder:
-           self.load_cfx_folder(folder)
+           if self.load_cfx_folder(folder):
+               self._prompt_for_backup_location_on_load()
+
+    def _prompt_for_backup_location_on_load(self):
+        """Ask (once, right after a root folder is chosen) whether the user wants to set
+        up a backup location. Optional - a 'No' here just leaves self.backup_path unset,
+        and save_changes() will nag about it again at save time instead."""
+        self.backup_path = None
+        response = QtWidgets.QMessageBox.question(
+            self,
+            "Backup Location",
+            "Would you like to choose a folder where the app can back up any files it "
+            "changes before overwriting them? This is optional but recommended.",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+        )
+        if response == QtWidgets.QMessageBox.Yes:
+            self._pick_backup_location()
+
+    def _pick_backup_location(self):
+        """Open a folder picker for the backup location, rejecting anything inside the
+        current CFX root folder. Sets self.backup_path on a valid pick; leaves it
+        untouched if the user cancels the dialog."""
+        while True:
+            folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Backup Location")
+            if not folder:
+                return
+            candidate = Path(folder).resolve()
+            try:
+                root_resolved = self.folder_path.resolve()
+            except OSError:
+                root_resolved = self.folder_path
+            if candidate == root_resolved or root_resolved in candidate.parents:
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Invalid Backup Location",
+                    "The backup folder can't be inside the CFX root folder. Please choose "
+                    "a different location."
+                )
+                continue
+            self.backup_path = candidate
+            return
+
+    def _backup_file(self, file_path: Path, font_name: str):
+        """Copy file_path's current contents into backup_path/font_name/ before it gets
+        overwritten, named with a timestamp so repeated saves don't collide. No-op if no
+        backup location is set, or if the file doesn't exist yet (nothing to preserve)."""
+        if self.backup_path is None or not file_path.is_file():
+            return
+        try:
+            dest_dir = self.backup_path / font_name
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            dest_path = dest_dir / f"{file_path.stem}_{timestamp}{file_path.suffix}"
+            shutil.copy2(file_path, dest_path)
+        except OSError as e:
+            print(f"Error backing up {file_path}: {e}")
+
+    def _confirm_no_backup(self) -> bool:
+        """Called from save_changes() when no backup location is set. Lets the user pick
+        one on the spot, continue without a backup, or cancel the save entirely. Returns
+        True if the save should proceed, False to abort it."""
+        box = QtWidgets.QMessageBox(self)
+        box.setIcon(QtWidgets.QMessageBox.Warning)
+        box.setWindowTitle("No Backup Location Set")
+        box.setText(
+            "No backup location is set, so the files this save overwrites won't be "
+            "backed up first.\n\nChoose a backup location, or continue without one?"
+        )
+        choose_button = box.addButton("Choose Backup Location...", QtWidgets.QMessageBox.ActionRole)
+        continue_button = box.addButton("Continue Without Backup", QtWidgets.QMessageBox.AcceptRole)
+        box.addButton(QtWidgets.QMessageBox.Cancel)
+        box.setDefaultButton(continue_button)
+        box.exec()
+
+        clicked = box.clickedButton()
+        if clicked == choose_button:
+            self._pick_backup_location()
+            return True
+        return clicked == continue_button
 
     def on_font_selected(self, item):
         try:
+            self.right_content_stack.setCurrentWidget(self.settings_scroll_area)
             font_path = Path(item.data(QtCore.Qt.UserRole))
-            
+            self.current_font_path = font_path
+            # Switching fonts should stop whatever this preview was playing for the
+            # previous one, same as it visually resets to unlit below.
+            self.sound_player.stop_all()
+            self.lockup_button.setChecked(False)
+
+
             # More robust font number extraction
             try:
                 font_name_parts = font_path.name.split('-')
@@ -401,7 +598,11 @@ class MainWindow(QtWidgets.QMainWindow):
                             print(f"Highlighted font: {item_font_name}")
                     except Exception as e:
                         print(f"Error parsing font name for highlighting: {e}")
-            
+
+            # Re-apply validation-error highlighting on top - red wins over the yellow
+            # "shared profile" highlight, same priority the settings grid uses for fields.
+            self._apply_font_list_validation_highlighting(reset_others=False)
+
             # Load blade profile if we have a valid profile number
             blade_settings = {}
             if effective_profile is not None and effective_profile != '-1':
@@ -460,6 +661,7 @@ class MainWindow(QtWidgets.QMainWindow):
             rgb = parse_rgbw(color_settings.get('color'))
             foc_rgb = parse_rgbw(color_settings.get('fcolor'), default=(255, 255, 255))
             lockup_rgb = parse_rgbw(color_settings.get('lcolor'), default=(255, 140, 0))
+            bolt_rgb = parse_rgbw(color_settings.get('bcolor'), default=(255, 60, 0))
             try:
                 qon_ms = int(settings.get('qon', 300))
             except ValueError:
@@ -470,12 +672,35 @@ class MainWindow(QtWidgets.QMainWindow):
                 qoff_ms = 300
             flicker_on = blade_settings.get('flkon') == '1'
             flicker_off = blade_settings.get('flkoff') == '1'
+
+            # style_grafx1 (main blade) points at an indexed /extra/GRAFX folder - resolve it
+            # to an actual path so the preview can play back this font's real GraFx BMPs
+            # (style_pon/poff=GraFx sequence, style_lockup=GraFx sequence, unstable=17/18)
+            # instead of falling back to a plain color.
+            grafx_folder = None
+            try:
+                grafx_num = int(blade_settings.get('style_grafx1', -1))
+                if grafx_num >= 0:
+                    grafx_folder = self.grafx_profile_paths.get(grafx_num)
+            except ValueError:
+                pass
+
             self.blade_preview.set_profile(
                 rgb, qon_ms, qoff_ms, flicker_on, flicker_off,
                 foc_rgb=foc_rgb, lockup_rgb=lockup_rgb,
                 pon_style_id=blade_settings.get('style_pon'),
                 poff_style_id=blade_settings.get('style_poff'),
                 unstable_id=blade_settings.get('unstable'),
+                clash_style_id=blade_settings.get('style_clash'),
+                lockup_style_id=blade_settings.get('style_lockup'),
+                pos_lockup=blade_settings.get('pos_lockup'),
+                size_lockup=blade_settings.get('size_lockup'),
+                focd_ms=blade_settings.get('focd'),
+                bolt_rgb=bolt_rgb,
+                blaster_style_id=blade_settings.get('style_blaster'),
+                grafx_folder=grafx_folder,
+                preon_style_id=blade_settings.get('style_preon'),
+                postoff_style_id=blade_settings.get('style_postoff'),
             )
             self.blade_preview.reset()
 
@@ -505,14 +730,27 @@ class MainWindow(QtWidgets.QMainWindow):
             param_sources.update({name: 'color' for name in color_settings})
             param_sources.update({name: 'font' for name in settings})
 
+            # Which reference font_config.txt keys (from this card's own 1-SABERTRIO font)
+            # this font's own file is missing (checked against the raw font-only settings,
+            # not the merged all_settings)
+            reference_keys = self.file_handler.load_reference_font_config_keys()
+            missing_font_keys = CFXValidator.check_missing_font_config_keys(settings, reference_keys)
+
             # Update UI with shared parameter information
             self.settings_grid.update_settings(
                 all_settings,
                 shared_with=shared_fonts,
                 shared_parameters=shared_parameters,
-                param_sources=param_sources
+                param_sources=param_sources,
+                missing_font_keys=missing_font_keys
             )
-                        
+
+            # Selecting a font from the list always jumps back to the top of the
+            # parameters view, rather than leaving it scrolled wherever the previous
+            # font's view happened to be.
+            self.settings_grid.scroll_to_top()
+            self._update_sticky_category_header()
+
         except Exception as e:
             print(f"Error loading settings: {e}")
             QtWidgets.QMessageBox.critical(
@@ -520,6 +758,56 @@ class MainWindow(QtWidgets.QMainWindow):
                 "Error",
                 f"Failed to load settings: {str(e)}"
             )
+
+    def _reload_grafx_profiles(self):
+        """(Re)scan <cfx_root>/extra/grafx for numbered GraFx resource folders. Called from
+        load_cfx_folder, and again after the GraFx Creator wizard writes a new resource so it
+        shows up in the style_grafx1/2/3 dropdowns without a full folder reload."""
+        print("Loading GraFx profiles...")
+        grafx_path = self.folder_path / 'extra' / 'grafx'
+        self.grafx_profiles = {}
+        self.grafx_profile_paths = {}  # number -> folder Path, for reading grafx1.txt/BMPs
+        if grafx_path.exists():
+            for item in grafx_path.iterdir():
+                if item.is_dir() and item.name[0].isdigit():
+                    try:
+                        # Extract number and name
+                        number = int(item.name.split('-')[0])
+                        # Skip any category prefix
+                        name = '-'.join(item.name.split('-')[1:])
+                        self.grafx_profiles[number] = name
+                        self.grafx_profile_paths[number] = item
+                        print(f"Found GraFx profile {number}: {name}")
+                    except (ValueError, IndexError):
+                        continue
+        print(f"Loaded {len(self.grafx_profiles)} GraFx profiles")
+
+    def open_grafx_creator(self):
+        """Open the GraFx Creator wizard and, if the user finishes it, make the new resource
+        immediately selectable in the style_grafx1/2/3 dropdowns."""
+        if not self.folder_path:
+            QtWidgets.QMessageBox.information(
+                self, "No Folder Loaded",
+                "Select a CFX root folder first."
+            )
+            return
+        from gui.grafx_creator_dialog import GrafxCreatorDialog
+        dialog = GrafxCreatorDialog(self.folder_path, main_window=self)
+        if dialog.exec() == QtWidgets.QDialog.Accepted:
+            apply_specs = dialog.link_apply_specs()
+            self._reload_grafx_profiles()
+            current_item = self.font_list.currentItem()
+            if current_item:
+                self.on_font_selected(current_item)
+                if apply_specs:
+                    for param_name, value in apply_specs.items():
+                        self.settings_grid.set_parameter_value(param_name, value)
+                    QtWidgets.QMessageBox.information(
+                        self, "GraFx Resource Linked",
+                        "The new GraFx resource has been linked to this font in the settings "
+                        "grid below. Nothing has been written to disk yet - review the "
+                        "highlighted parameters and click Save Changes when you're ready."
+                    )
 
     def load_cfx_folder(self, folder_path):
         try:
@@ -536,7 +824,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     "Invalid Folder Structure",
                     f"The selected folder has the following issues:\n{error_msg}"
                 )
-                return
+                return False
 
             # Load color profiles
             from core.color_utils import load_color_profiles
@@ -544,22 +832,7 @@ class MainWindow(QtWidgets.QMainWindow):
             print(f"Loaded {len(self.color_profiles)} color profiles")
             
             # Load GraFx profiles
-            print("Loading GraFx profiles...")
-            grafx_path = self.folder_path / 'extra' / 'grafx'
-            self.grafx_profiles = {}
-            if grafx_path.exists():
-                for item in grafx_path.iterdir():
-                    if item.is_dir() and item.name[0].isdigit():
-                        try:
-                            # Extract number and name
-                            number = int(item.name.split('-')[0])
-                            # Skip any category prefix
-                            name = '-'.join(item.name.split('-')[1:])
-                            self.grafx_profiles[number] = name
-                            print(f"Found GraFx profile {number}: {name}")
-                        except (ValueError, IndexError):
-                            continue
-            print(f"Loaded {len(self.grafx_profiles)} GraFx profiles")
+            self._reload_grafx_profiles()
 
             # Load Accent LED and Pixel Accent (Pixies) profiles - same indexed-folder
             # linking scheme as GraFx, referenced by style_accents / style_pixies
@@ -575,7 +848,16 @@ class MainWindow(QtWidgets.QMainWindow):
                 list_item = QtWidgets.QListWidgetItem(f"{font_num}-{font_name}")
                 list_item.setData(QtCore.Qt.UserRole, str(font_path))
                 self.font_list.addItem(list_item)
-                
+
+            # No font is selected yet right after a folder loads - show the placeholder
+            # instead of an empty settings grid until the user picks one.
+            self.right_content_stack.setCurrentWidget(self.no_font_placeholder)
+
+            # Validate every soundfont on the card right away, instead of requiring a
+            # separate "Validate All Soundfonts" button click.
+            self._run_and_apply_validation()
+            return True
+
         except Exception as e:
             print(f"Error loading CFX folder: {e}")
             QtWidgets.QMessageBox.warning(
@@ -583,6 +865,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 "Error",
                 f"Failed to load CFX folder: {str(e)}"
             )
+            return False
 
     def _resolve_effective_profile_and_color(self, settings, font_num, prefs):
         """Given a font's raw font_config.txt settings, resolve which blade profile and
@@ -606,26 +889,50 @@ class MainWindow(QtWidgets.QMainWindow):
 
         return effective_profile, effective_color
 
-    def validate_all_fonts(self):
+    def _run_and_apply_validation(self):
         """Walk every soundfont on the loaded card and report anything wrong: the same
         parameter-level checks the settings grid highlights red for whichever font is
         currently selected, run across every font, plus config.txt/colors.txt structural
-        errors (duplicate profile/color numbers) and blade/color profiles nothing uses."""
-        if not self.file_handler or not self.folder_path:
-            QtWidgets.QMessageBox.warning(
-                self, "No Folder Loaded", "Select a CFX root folder first."
-            )
-            return
+        errors (duplicate profile/color numbers) and blade/color profiles nothing uses.
 
+        Runs automatically after a folder loads (see load_cfx_folder). Colors the font
+        list to flag which fonts have problems, and pops the report dialog - same as the
+        old "Validate All Soundfonts" button did - only if something was actually found."""
         QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
         try:
             report = self._run_full_validation()
         finally:
             QtWidgets.QApplication.restoreOverrideCursor()
 
-        dialog = ValidationReportDialog(report, self)
-        dialog.jump_to_font.connect(self._jump_to_font)
-        dialog.exec()
+        self.validation_report = report
+        self.font_validation_by_path = {
+            str(font_report['font_path']): font_report for font_report in report['font_reports']
+        }
+        self._apply_font_list_validation_highlighting()
+
+        has_issues = bool(
+            report['structural_errors'] or report['global_errors'] or report['font_reports']
+            or report['orphaned_profiles'] or report['orphaned_colors']
+        )
+        if has_issues:
+            dialog = ValidationReportDialog(report, self.file_handler, self, backup_fn=self._backup_file)
+            dialog.jump_to_font.connect(self._jump_to_font)
+            dialog.font_config_changed.connect(self._on_font_config_changed_externally)
+            dialog.exec()
+
+    def _apply_font_list_validation_highlighting(self, reset_others=True):
+        """Color each font-list row red if that font has validation errors or missing
+        font_config.txt keys, per the last validation pass. When reset_others is True
+        (e.g. right after loading a folder), every other row goes back to white; when False
+        (called from on_font_selected, after its own shared-profile yellow highlighting),
+        only the red overlay is applied, so red wins over yellow without erasing it."""
+        for i in range(self.font_list.count()):
+            item = self.font_list.item(i)
+            font_path = item.data(QtCore.Qt.UserRole)
+            if font_path in self.font_validation_by_path:
+                item.setBackground(QtGui.QColor("#FFB3B3"))  # same red as the settings grid's ERROR_PARAM_COLOR
+            elif reset_others:
+                item.setBackground(QtGui.QColor(255, 255, 255))
 
     def _run_full_validation(self):
         report = {
@@ -654,6 +961,7 @@ class MainWindow(QtWidgets.QMainWindow):
         referenced_colors = set()
         font_folders = self.file_handler.load_font_folders()
         report['font_count'] = len(font_folders)
+        reference_keys = self.file_handler.load_reference_font_config_keys()
 
         for font_num, font_name, font_path in font_folders:
             settings = self.file_handler.load_font_config(font_path)
@@ -663,6 +971,8 @@ class MainWindow(QtWidgets.QMainWindow):
                     'errors': {'(font_config.txt)': 'Missing or empty font_config.txt'},
                 })
                 continue
+
+            missing_font_keys = CFXValidator.check_missing_font_config_keys(settings, reference_keys)
 
             effective_profile, effective_color = self._resolve_effective_profile_and_color(
                 settings, font_num, prefs
@@ -735,10 +1045,11 @@ class MainWindow(QtWidgets.QMainWindow):
                     font_errors[name] = msg
             grid.deleteLater()
 
-            if font_errors:
+            if font_errors or missing_font_keys:
                 report['font_reports'].append({
                     'font_num': font_num, 'font_name': font_name, 'font_path': font_path,
                     'errors': font_errors,
+                    'missing_keys': missing_font_keys,
                 })
 
         report['orphaned_profiles'] = sorted(all_profile_numbers - referenced_profiles)
@@ -754,6 +1065,31 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.font_list.setCurrentItem(item)
                 self.on_font_selected(item)
                 return
+
+    def _on_font_config_changed_externally(self, font_path_str):
+        """A font_config.txt was written to disk from outside the settings grid (e.g. the
+        validation report's "insert missing keys" action). Silently re-validates so the
+        font-list red highlighting stays accurate, without popping another report dialog on
+        top of the one this change likely came from. If a font is currently selected,
+        on_font_selected recomputes both its shared-profile and validation highlighting (and
+        reloads the grid if the changed font is the one selected); otherwise just re-applies
+        the red highlighting directly."""
+        if self.file_handler and self.folder_path:
+            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+            try:
+                report = self._run_full_validation()
+            finally:
+                QtWidgets.QApplication.restoreOverrideCursor()
+            self.validation_report = report
+            self.font_validation_by_path = {
+                str(font_report['font_path']): font_report for font_report in report['font_reports']
+            }
+
+        current_item = self.font_list.currentItem()
+        if current_item:
+            self.on_font_selected(current_item)
+        else:
+            self._apply_font_list_validation_highlighting()
 
     def save_changes(self):
         try:
@@ -785,6 +1121,9 @@ class MainWindow(QtWidgets.QMainWindow):
                     f"validation:\n{error_lines}\n\nSave anyway?"
                 )
 
+            if self.backup_path is None and not self._confirm_no_backup():
+                return  # user cancelled the save from the no-backup warning
+
             response = QtWidgets.QMessageBox.question(
                 self,
                 "Save Changes",
@@ -794,8 +1133,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
             if response == QtWidgets.QMessageBox.Yes:
                 font_path = Path(current_item.data(QtCore.Qt.UserRole))
+                font_name = font_path.name
 
                 # Save font configuration
+                self._backup_file(font_path / "font_config.txt", font_name)
                 if not self.file_handler.save_font_config(font_path, font_settings):
                     raise Exception("Failed to save font configuration")
 
@@ -808,6 +1149,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     if profile_num >= 0:  # Only save if it's a valid profile number
                         existing_blade = self.file_handler.load_blade_profile(profile_num) or {}
                         existing_blade.update(blade_settings)
+                        self._backup_file(self.folder_path / "config.txt", font_name)
                         if not self.file_handler.save_blade_profile(profile_num, existing_blade):
                             raise Exception(f"Failed to save blade profile {profile_num}")
 
@@ -817,6 +1159,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     if color_num >= 0:  # Only save if it's a valid color number
                         existing_color = self.file_handler.load_color_profile(color_num) or {}
                         existing_color.update(color_settings)
+                        self._backup_file(self.folder_path / "colors.txt", font_name)
                         if not self.file_handler.save_color_profile(color_num, existing_color):
                             raise Exception(f"Failed to save color profile {color_num}")
 
@@ -824,6 +1167,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 if global_settings:
                     existing_global = self.file_handler.load_master_config() or {}
                     existing_global.update(global_settings)
+                    self._backup_file(self.folder_path / "config.txt", font_name)
                     if not self.file_handler.save_master_config(existing_global):
                         raise Exception("Failed to save global configuration")
 
@@ -990,8 +1334,9 @@ class MainWindow(QtWidgets.QMainWindow):
                         if settings:
                             # Update the profile number
                             settings[param_name] = new_data
-                            
+
                             # Save the updated settings
+                            self._backup_file(font_path / "font_config.txt", font_path.name)
                             self.file_handler.save_font_config(font_path, settings)
                             
                             # Reload the font to display updated settings

@@ -1,4 +1,5 @@
 # src/core/validators.py
+import re
 from pathlib import Path
 from typing import Tuple, List, Dict, Optional
 
@@ -11,6 +12,12 @@ class CFXValidator:
     """Validates CFX folder structure and file contents."""
 
     REQUIRED_FILES = ['config.txt', 'colors.txt']
+
+    BOLT_KEY_RE = re.compile(r'^bolt(\d+)$')
+
+    # Keys that show up in the reference '1-SABERTRIO' font_config.txt but aren't actually
+    # required - a font is free to omit these, so they shouldn't be flagged as "missing".
+    NOT_REQUIRED_KEYS = {'tridentflk'}
 
     # Groups of parameters with a documented relationship (see check_cross_parameter_rules).
     # Used by the GUI to know which widgets should trigger live re-validation of each other.
@@ -58,6 +65,48 @@ class CFXValidator:
                 return f"'{raw_value}' is outside the declared range [{lo}, {hi}]"
 
         return None
+
+    @staticmethod
+    def check_bolt_key_gaps(settings: Dict[str, str]) -> Dict[str, str]:
+        """bolt<n> keys (per-impact timings for a blaster sound) form a 0-indexed sequence
+        of whatever length a font needs - CFX doesn't require any specific count, only that
+        the numbering has no gaps (bolt0, bolt1, bolt2, ... is fine at any length; bolt0,
+        bolt1, bolt3 with no bolt2 is not). Returns {key: default_value} for each missing
+        index below the highest one actually present."""
+        indices = set()
+        for key in settings:
+            match = CFXValidator.BOLT_KEY_RE.match(key)
+            if match:
+                indices.add(int(match.group(1)))
+        if not indices:
+            return {}
+        return {f'bolt{i}': '1' for i in range(max(indices)) if i not in indices}
+
+    @staticmethod
+    def check_missing_font_config_keys(settings: Dict[str, str], reference: Dict[str, str]) -> Dict[str, str]:
+        """Compare a font's raw font_config.txt keys against a reference key set (plus any
+        gap in its bolt<n> sequence). `reference` should come from
+        CFXFileHandler.load_reference_font_config_keys() - the loaded SD card's own
+        '1-SABERTRIO' font_config.txt - rather than being hardcoded here, since the exact
+        key list a firmware version expects can change between updates; 1-SABERTRIO's file
+        is whatever this card's firmware actually needs right now. Returns
+        {key: default_value} for every expected key that's absent, so callers can both
+        report the gap and offer to fill it in. `settings` should be just the font's own
+        font_config.txt contents (not merged with blade/color/global scope), since a key
+        can be legitimately absent from font_config.txt while still resolving to a value
+        from elsewhere - that's not what this checks. bolt<n> keys in `reference` are
+        ignored for the literal presence check (that family's expected length isn't fixed -
+        see check_bolt_key_gaps) but still contribute via the gap check. Keys in
+        NOT_REQUIRED_KEYS are also excluded, even though the reference font happens to set
+        them - they're not actually required."""
+        missing = {
+            key: default
+            for key, default in reference.items()
+            if key not in settings and not CFXValidator.BOLT_KEY_RE.match(key)
+            and key not in CFXValidator.NOT_REQUIRED_KEYS
+        }
+        missing.update(CFXValidator.check_bolt_key_gaps(settings))
+        return missing
 
     @staticmethod
     def check_cross_parameter_rules(settings: Dict[str, str]) -> Dict[str, str]:

@@ -32,6 +32,18 @@ class CFXFileHandler:
             print(f"Error loading font folders: {e}")
             return []
 
+    def load_reference_font_config_keys(self) -> Dict:
+        """Load the reference font_config.txt from this root folder's '1-SABERTRIO' font -
+        a real CFX multi-blade font that's used here as the canonical, always-present
+        template of which keys a font_config.txt is expected to define. Read fresh from
+        the SD card (not hardcoded) since the exact key list can change between firmware
+        versions - 1-SABERTRIO's own file is the source of truth for whatever firmware
+        this card is running. Returns {} if no font named 'SABERTRIO' is found."""
+        for _num, name, path in self.load_font_folders():
+            if name.strip().upper() == 'SABERTRIO':
+                return self.load_font_config(path)
+        return {}
+
     def load_font_config(self, font_path: Path) -> Dict:
         """Load font configuration from font_config.txt"""
         settings = {}

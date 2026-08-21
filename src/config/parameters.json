@@ -2,8 +2,8 @@
     "accentstrip": {
         "type": "integer",
         "range": [
-            -480,
-            480
+            -25,
+            25
         ],
         "display_type": "spinner",
         "description": "enables the pixel accents (sequencer). Also defined as an offset on either the main blade & strip output LS1 (> 0), or LS2 (< 0).",
@@ -50,8 +50,8 @@
     "auxaccentstrip": {
         "type": "integer",
         "range": [
-            -480,
-            480
+            -25,
+            25
         ],
         "display_type": "spinner",
         "description": "enables the pixel accents (sequencer). Also defined as an offset on either the main blade & strip output LS1 (> 0), or LS2 (< 0).",
@@ -308,7 +308,7 @@
         "type": "integer",
         "range": [
             0,
-            180
+            280
         ],
         "display_type": "spinner",
         "description": "defines the maximum size (pixels) of the drag tip effect",
@@ -347,7 +347,7 @@
     "fbolt": {
         "type": "integer",
         "range": [
-            0,
+            1,
             100
         ],
         "display_type": "spinner",
@@ -417,7 +417,7 @@
     "flks": {
         "type": "integer",
         "range": [
-            1,
+            0,
             500
         ],
         "display_type": "spinner",
@@ -562,7 +562,7 @@
         "type": "integer",
         "range": [
             0,
-            1023
+            200
         ],
         "display_type": "spinner",
         "description": "minimum motion quantity required to start the motion recognition engine.Base value between 15 to 70 works fine (default: 50)",
@@ -592,7 +592,7 @@
         "type": "integer",
         "range": [
             0,
-            1023
+            2000
         ],
         "display_type": "spinner",
         "description": "clash threshold",
@@ -612,7 +612,7 @@
         "type": "integer",
         "range": [
             0,
-            1023,
+            2000,
             -90,
             90
         ],
@@ -625,7 +625,7 @@
         "type": "integer",
         "range": [
             0,
-            1023
+            2000
         ],
         "display_type": "spinner",
         "description": "threshold to trigger a force clash fx",
@@ -635,7 +635,7 @@
         "type": "integer",
         "range": [
             0,
-            1023
+            2000
         ],
         "display_type": "spinner",
         "description": "threshold to trigger force fx",
@@ -645,7 +645,7 @@
         "type": "integer",
         "range": [
             0,
-            1023
+            2000
         ],
         "display_type": "spinner",
         "description": "Hybrid or accent swing threshold when using a smoothswing font",
@@ -655,7 +655,7 @@
         "type": "integer",
         "range": [
             0,
-            1023
+            2000
         ],
         "display_type": "spinner",
         "description": "slash threshold",
@@ -665,7 +665,7 @@
         "type": "integer",
         "range": [
             0,
-            1022
+            2000
         ],
         "display_type": "spinner",
         "description": "spin threshold",
@@ -675,7 +675,7 @@
         "type": "integer",
         "range": [
             0,
-            1022,
+            2000,
             -90,
             90
         ],
@@ -688,7 +688,7 @@
         "type": "integer",
         "range": [
             0,
-            1023
+            2000
         ],
         "display_type": "spinner",
         "description": "swing threshold",
@@ -698,7 +698,7 @@
         "type": "integer",
         "range": [
             0,
-            200
+            150
         ],
         "display_type": "spinner",
         "description": "the temperature threshold. (not a gesture/motion parameter but hosted with the other thresholds)",
@@ -708,7 +708,7 @@
         "type": "integer",
         "range": [
             0,
-            1023
+            2000
         ],
         "display_type": "spinner",
         "description": "twist threshold",
@@ -819,7 +819,7 @@
         "type": "integer",
         "range": [
             0,
-            2
+            4
         ],
         "display_type": "dropdown",
         "values": {
@@ -918,7 +918,7 @@
         "type": "integer",
         "range": [
             0,
-            3
+            4
         ],
         "display_type": "dropdown",
         "values": {
@@ -935,7 +935,7 @@
         "type": "integer",
         "range": [
             0,
-            3
+            4
         ],
         "display_type": "dropdown",
         "values": {
@@ -952,7 +952,7 @@
         "type": "integer",
         "range": [
             0,
-            3
+            4
         ],
         "display_type": "dropdown",
         "values": {
@@ -969,7 +969,7 @@
         "type": "integer",
         "range": [
             0,
-            1023
+            2000
         ],
         "display_type": "range_pair",
         "description": "range used for mapping movement to the fx (like swingbright). A low value means the effect will be quickly visible when swinging. High value means it will be less and later visible during swinging",
@@ -979,7 +979,7 @@
         "type": "integer",
         "range": [
             0,
-            3
+            4
         ],
         "display_type": "dropdown",
         "values": {
@@ -996,7 +996,7 @@
         "type": "integer",
         "range": [
             0,
-            3
+            4
         ],
         "display_type": "dropdown",
         "values": {
@@ -1319,7 +1319,7 @@
         "type": "integer",
         "range": [
             0,
-            3
+            4
         ],
         "display_type": "dropdown",
         "values": {
@@ -1396,7 +1396,7 @@
         "type": "integer",
         "range": [
             0,
-            255
+            280
         ],
         "display_type": "spinner",
         "description": "defines the spatial flicker location on the blade",
@@ -1473,7 +1473,7 @@
     "qoff": {
         "type": "integer",
         "range": [
-            1,
+            0,
             10000
         ],
         "display_type": "spinner",
@@ -1628,7 +1628,7 @@
         "type": "integer",
         "range": [
             0,
-            178
+            279
         ],
         "display_type": "range_pair",
         "description": "list of 2 numbers, minimum and maximum size of the bolt impact. When set to 0,0 and in ledstrip mode, the bolt will make the whole blade to flash (legacy Flash on Clash)",
@@ -1657,7 +1657,7 @@
     "shmrp": {
         "type": "integer",
         "range": [
-            10,
+            6,
             1000
         ],
         "display_type": "spinner",
@@ -1796,7 +1796,7 @@
         "type": "integer",
         "range": [
             0,
-            1023
+            200
         ],
         "display_type": "spinner",
         "description": "minimum required to start the smoothswing engine. Usually thesame as the gate above but we added a specific parameter to it, just in case",
@@ -2019,8 +2019,8 @@
     "style_clash": {
         "type": "integer",
         "range": [
-            0,
-            3
+            1,
+            7
         ],
         "display_type": "dropdown",
         "values": {
@@ -2097,8 +2097,8 @@
     "style_lockup": {
         "type": "integer",
         "range": [
-            0,
-            3
+            1,
+            7
         ],
         "display_type": "dropdown",
         "values": {
@@ -2125,7 +2125,7 @@
         "type": "integer",
         "range": [
             0,
-            9
+            17
         ],
         "display_type": "dropdown",
         "values": {
@@ -2155,7 +2155,7 @@
         "type": "integer",
         "range": [
             0,
-            8
+            14
         ],
         "display_type": "dropdown",
         "values": {
@@ -2337,7 +2337,7 @@
         ],
         "display_type": "dropdown",
         "values": {
-            "0": "Simpel delay - the normal (non-Trident) channel starts ramping up followed by the delayed channel(s) which start(s) after the duration specified by the tridenton parameter. All channels catch up together at the end of the power-on sound.",
+            "0": "Simple delay - the normal (non-Trident) channel starts ramping up followed by the delayed channel(s) which start(s) after the duration specified by the tridenton parameter. All channels catch up together at the end of the power-on sound.",
             "1": "In sequence - the non-delayed channels will ramp up to their max within the duration of tridenton, then the delayed Trident channels will ramp on their own until the end of the power-on sound."
         },
         "description": "Defines the mode of the Trident effect. Mode 0 is a simple delay, the normal (non-Trident) channel starts ramping up followed by the delayed channel(s) which start(s) after the duration specified by the tridenton parameter. All channels catch up together at the end of the power-on sound. In mode 1, the non-delayed channels will ramp up to their max within the duration of tridenton, then the delayed Trident channels will ramp on their own until the end of the power-on sound. The 2 modes show little differences in behavior if the delay duration is close to the power-on sound duration but are interesting if the delay is < to half of the duration of the power-on sound.",
@@ -2542,5 +2542,12 @@
         "display_type": "spinner",
         "description": "Revive from deep sleep delay",
         "parameter_category": "Wake"
+    },
+    "style_grafx": {
+        "type": "integer",
+        "display_type": "dropdown",
+        "description": "defines the linking between the profile and the location of the GraFx blade configuration within /extra/GRAFX indexed subfolders",
+        "parameter_category": "Profile & External Configuration",
+        "notes": "Points to an indexed resource subfolder on the SD card - valid values depend on what's actually present there, not a fixed range or option list."
     }
 }
