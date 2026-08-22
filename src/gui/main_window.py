@@ -804,32 +804,61 @@ class MainWindow(QtWidgets.QMainWindow):
             apply_specs = dialog.link_apply_specs()
             self._reload_grafx_profiles()
             current_item = self.font_list.currentItem()
-            if current_item:
-                self.on_font_selected(current_item)
-                if apply_specs:
-                    # set_parameter_value can fail to find a widget for a param that isn't
-                    # currently displayed - e.g. a blade profile/font that has never set
-                    # unstable or style_grafx1/2/3 before won't show them in the grid at all,
-                    # since it only renders params actually present in the loaded settings.
-                    # Report that instead of claiming success while quietly doing nothing.
-                    failed = [param_name for param_name, value in apply_specs.items()
-                              if not self.settings_grid.set_parameter_value(param_name, value)]
-                    if failed:
-                        QtWidgets.QMessageBox.warning(
-                            self, "Couldn't Fully Link GraFx Resource",
-                            "The GraFx resource was created, but these parameters aren't "
-                            "currently shown for this font/blade profile, so they couldn't be "
-                            "set automatically:\n\n" + ", ".join(failed) +
-                            "\n\nYou'll need to add and set them by hand (they may need to be "
-                            "added to font_config.txt or the blade profile first)."
-                        )
-                    else:
-                        QtWidgets.QMessageBox.information(
-                            self, "GraFx Resource Linked",
-                            "The new GraFx resource has been linked to this font in the settings "
-                            "grid below. Nothing has been written to disk yet - review the "
-                            "highlighted parameters and click Save Changes when you're ready."
-                        )
+            resource_desc = f"'{dialog.created_folder.name}'" if dialog.created_folder else "The resource"
+
+            if current_item is None:
+                # Nothing to apply specs to, and nothing to reselect/refresh - the resource
+                # still got written to disk, but with no font selected in the list there's no
+                # settings grid to push unstable/style_grafx1/2/3 into. Without this message
+                # the wizard would just silently close having done nothing visible, leaving
+                # the resource created but unlinked from any font.
+                QtWidgets.QMessageBox.information(
+                    self, "GraFx Resource Created",
+                    f"{resource_desc} was created, but no font is currently selected, so it "
+                    "wasn't linked to anything. Select a font, then set style_grafx1/2/3 "
+                    "(and the matching style_pon/style_poff/unstable/etc.) to it by hand, or "
+                    "select a font first and run the wizard again to link automatically."
+                )
+                return
+
+            self.on_font_selected(current_item)
+            if not apply_specs:
+                # Reached whenever link_apply_specs() returned {} - the "Automatically set
+                # up..." checkbox was left unchecked (or was disabled because no font was
+                # selected when the wizard was opened, even if one is selected now). Same
+                # silent-no-op risk as the no-font-selected case above.
+                QtWidgets.QMessageBox.information(
+                    self, "GraFx Resource Created",
+                    f"{resource_desc} was created, but wasn't linked to '{current_item.text()}' "
+                    "(the \"Automatically set up...\" option wasn't used). Set style_grafx1/2/3 "
+                    "(and the matching style_pon/style_poff/unstable/etc.) by hand in the "
+                    "settings grid below, then Save Changes."
+                )
+                return
+
+            # set_parameter_value can fail to find a widget for a param that isn't currently
+            # displayed - e.g. a blade profile/font that has never set unstable or
+            # style_grafx1/2/3 before won't show them in the grid at all, since it only
+            # renders params actually present in the loaded settings. Report that instead of
+            # claiming success while quietly doing nothing.
+            failed = [param_name for param_name, value in apply_specs.items()
+                      if not self.settings_grid.set_parameter_value(param_name, value)]
+            if failed:
+                QtWidgets.QMessageBox.warning(
+                    self, "Couldn't Fully Link GraFx Resource",
+                    "The GraFx resource was created, but these parameters aren't "
+                    "currently shown for this font/blade profile, so they couldn't be "
+                    "set automatically:\n\n" + ", ".join(failed) +
+                    "\n\nYou'll need to add and set them by hand (they may need to be "
+                    "added to font_config.txt or the blade profile first)."
+                )
+            else:
+                QtWidgets.QMessageBox.information(
+                    self, "GraFx Resource Linked",
+                    "The new GraFx resource has been linked to this font in the settings "
+                    "grid below. Nothing has been written to disk yet - review the "
+                    "highlighted parameters and click Save Changes when you're ready."
+                )
 
     def load_cfx_folder(self, folder_path):
         try:
