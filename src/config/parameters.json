@@ -2129,7 +2129,7 @@
         ],
         "display_type": "dropdown",
         "values": {
-            "0": "Normal - normal/regular (legacy) power-on with just scrolling and fade if onfade is enabled.",
+            "0": "Normal - normal/regular (legacy) power-off with just scrolling and fade if onfade is enabled.",
             "1": "Lightstick - lightstick style, with scrolling disabled (non-spatial fade if onfade is enabled)",
             "2": "Crumble - Pixelated retraction",
             "3": "Star dust - Leaves light dust behind",

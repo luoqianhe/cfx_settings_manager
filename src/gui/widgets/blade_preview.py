@@ -11,8 +11,14 @@ from core.grafx_reader import load_grafx_state, stage_color
 # option names alone. Styles that share a description's wording share a render:
 # 'crumble' = "pixelated" grain, 'chopped' = "flashing chunks" (a distinct, coarser look -
 # same idea, bigger and binary rather than fine and jittered), 'comet' = a bright FoC-tinted
-# leading edge fading back to blade color ("tip flare"/quicksilver/mercury/catchup/super nova
-# all describe basically this), 'base_flare'/'full_flare' = flares explicitly localized to the
+# leading edge fading back to blade color (Tip flare's baseline look - the description every
+# other comet-family style is a "variant" of), 'comet_tail' = the same head with a longer,
+# more gradual fade ("Quicksilver... with tailing added"), 'flood' = a wider, more saturated
+# FoC wash across most of the segment rather than a thin head ("Mercury - A flood variant of
+# quicksilver"), 'curtain' = a hard-edged FoC block (no glow/gradient) at the leading edge
+# instead of a soft comet head ("Catchup... Curtain like fx. FoC color whiped by blade
+# color"), 'nova' = a comet head plus trailing particles ("Super nova - A FoC colored comet
+# head with particle tailing"), 'base_flare'/'full_flare' = flares explicitly localized to the
 # hilt end (and hilt+tip together), and 'fade_trail' = a tailing fade that stays blade-colored
 # throughout, since Dissolve's description explicitly rules out any FoC tint the other tailing
 # styles have. 'grafx' (GraFx sequence) plays back this font's actual GraFx BMP resource, if
@@ -21,13 +27,22 @@ from core.grafx_reader import load_grafx_state, stage_color
 PON_STYLE_MAP = {
     '0': 'normal', '1': 'lightstick',
     '2': 'flare', '3': 'base_flare', '4': 'comet', '5': 'full_flare',
-    '6': 'crumble', '7': 'comet', '8': 'comet', '9': 'comet', '10': 'grafx',
+    '6': 'crumble', '7': 'comet_tail', '8': 'flood', '9': 'curtain', '10': 'grafx',
     '11': 'inverted', '12': 'split_in', '13': 'split_out', '14': 'chopped',
 }
 POFF_STYLE_MAP = {
     '0': 'normal', '1': 'lightstick',
-    '2': 'crumble', '3': 'sparkle_dust', '4': 'comet', '5': 'crumble',
-    '6': 'fade_trail', '7': 'sparkle_flake', '8': 'comet', '9': 'comet', '10': 'split_in',
+    '2': 'crumble', '3': 'sparkle_dust', '4': 'nova', '5': 'crumble',
+    '6': 'fade_trail', '7': 'sparkle_flake', '8': 'comet_tail', '9': 'flood',
+    # id 10 ("Split style - retraction in 2 halves TO THE CENTER... with a fading dot") maps
+    # to the 'split_out' shape, not 'split_in', even though PON's analogous-sounding "Split-in,
+    # tips to center" (id 12) maps to 'split_in' - _lit_segments' 'split_out' shape is anchored
+    # at the blade's center and shrinks toward it as fill decreases (exactly a retraction that
+    # ends in a center dot); 'split_in' is anchored at the two ends and would instead shrink
+    # back toward the tip/hilt, i.e. the opposite of "to the center". The style *names* mirror
+    # PON's, but the *shape* each one needs is about which end the animation converges on, not
+    # which id number it shares a name with.
+    '10': 'split_out',
     '11': 'grafx',
     '12': 'flare', '13': 'base_flare', '14': 'comet', '15': 'full_flare',
     '16': 'inverted', '17': 'chopped',
@@ -598,24 +613,59 @@ class BladePreviewWidget(QtWidgets.QWidget):
 
     def _draw_comet(self, painter, rect, color):
         """Bright FoC-tinted 'head' at the moving edge (rect.top(), since every style that maps
-        here uses the hilt-anchored growth/shrink shape) fading into blade color behind it."""
+        here uses the hilt-anchored growth/shrink shape) fading into blade color behind it.
+        This is Tip flare's baseline look - every other comet-family style below is a
+        variation on it, per the RICE descriptions explicitly calling them "variants"."""
         glow = QtGui.QColor(color)
         glow.setAlpha(70)
         painter.fillRect(rect.adjusted(-8, -4, 8, 0), glow)
         painter.fillRect(rect, color)
         self._draw_comet_head(painter, rect, color)
 
-    def _draw_comet_head(self, painter, rect, color):
+    def _draw_comet_head(self, painter, rect, color, head_h=24, bands=(1.0, 0.6, 0.3)):
         """Just the bright FoC-tinted head bands from _draw_comet, without the base fill -
         so full_flare can layer this on top of its own hilt-end gradient instead of one
-        overwriting the other."""
-        head_h = min(24, rect.height())
-        band_h = max(1, head_h // 3)
+        overwriting the other, and comet_tail can stretch it into a longer fade."""
+        head_h = min(head_h, rect.height())
+        band_h = max(1, head_h // len(bands))
         y = rect.top()
-        for frac in (1.0, 0.6, 0.3):
+        for frac in bands:
             painter.fillRect(QtCore.QRect(rect.left(), y, rect.width(), band_h),
                               self._blend(color, self._foc_color, frac))
             y += band_h
+
+    def _draw_comet_tail(self, painter, rect, color):
+        """Quicksilver: 'Variant of tip flare but with tailing added' - the same bright head
+        as plain comet, stretched over roughly twice the distance with more, finer-graded
+        bands so the fade back to blade color reads as a longer trailing streak."""
+        glow = QtGui.QColor(color)
+        glow.setAlpha(70)
+        painter.fillRect(rect.adjusted(-8, -4, 8, 0), glow)
+        painter.fillRect(rect, color)
+        self._draw_comet_head(painter, rect, color, head_h=48, bands=(1.0, 0.8, 0.6, 0.4, 0.2))
+
+    def _draw_flood(self, painter, rect, color):
+        """Mercury: 'A flood variant of quicksilver' - rather than a thin head with a fading
+        tail, most of the segment is washed toward FoC color, reading as bigger, brighter,
+        and more saturated than the comet-family styles' narrow leading edge."""
+        glow = QtGui.QColor(color)
+        glow.setAlpha(90)
+        painter.fillRect(rect.adjusted(-10, -4, 10, 0), glow)
+        gradient = QtGui.QLinearGradient(rect.left(), rect.top(), rect.left(), rect.bottom())
+        gradient.setColorAt(0.0, self._blend(color, self._foc_color, 0.85))
+        gradient.setColorAt(0.7, self._blend(color, self._foc_color, 0.5))
+        gradient.setColorAt(1.0, color)
+        painter.fillRect(rect, QtGui.QBrush(gradient))
+
+    def _draw_curtain(self, painter, rect, color):
+        """Catchup: 'Curtain like fx. FoC color whiped by blade color' - a hard-edged block of
+        solid FoC color at the leading edge and plain blade color everywhere behind it, unlike
+        the comet-family styles' soft glow/gradient - reads as a sharp wipe boundary sweeping
+        through rather than a fading head."""
+        painter.fillRect(rect, color)
+        curtain_h = min(20, rect.height())
+        painter.fillRect(QtCore.QRect(rect.left(), rect.top(), rect.width(), curtain_h),
+                          self._foc_color)
 
     def _draw_fade_trail(self, painter, rect, color):
         """Dissolve: tailing like the comet styles, but explicitly 'blade colored only' per
@@ -676,11 +726,13 @@ class BladePreviewWidget(QtWidgets.QWidget):
         self._draw_comet_head(painter, rect, color)
 
     def _draw_retraction_sparkles(self, painter, left, top, width, segments):
-        """Star dust / Star flakes (poff 3/7): both explicitly describe residue trailing the
-        retraction ('leaves light dust behind' / sparkle tailing), not a moving comet head -
-        so unlike the comet styles, this paints faint specks in the region the retracting
-        blade has already vacated (between the blade tip and the current lit edge), denser
-        and brighter near that edge and fading out toward the tip."""
+        """Star dust / Star flakes / Super nova's particle tail (poff 3/7/4): all explicitly
+        describe residue trailing the retraction ('leaves light dust behind' / sparkle tailing
+        / 'particle tailing'), not just a moving comet head - so unlike the plain comet-family
+        styles, this paints faint specks in the region the retracting blade has already
+        vacated (between the blade tip and the current lit edge), denser and brighter near
+        that edge and fading out toward the tip. Nova already draws its own FoC-tinted comet
+        head via _draw_comet - this only adds the particle trail behind it."""
         if not segments:
             return
         vacated_bottom = segments[0].top()
@@ -688,7 +740,7 @@ class BladePreviewWidget(QtWidgets.QWidget):
         span = vacated_bottom - vacated_top
         if span <= 0:
             return
-        tint = self._foc_color if self._poff_style == 'sparkle_flake' else self._color
+        tint = self._foc_color if self._poff_style in ('sparkle_flake', 'nova') else self._color
         for _ in range(14):
             y = random.randint(vacated_top, vacated_bottom)
             dist = (vacated_bottom - y) / span
@@ -1057,8 +1109,14 @@ class BladePreviewWidget(QtWidgets.QWidget):
                     self._draw_crumble(painter, blade_rect, color)
                 elif style == 'chopped':
                     self._draw_chopped(painter, blade_rect, color)
-                elif style == 'comet':
+                elif style in ('comet', 'nova'):  # nova's particle tail is layered on below
                     self._draw_comet(painter, blade_rect, color)
+                elif style == 'comet_tail':
+                    self._draw_comet_tail(painter, blade_rect, color)
+                elif style == 'flood':
+                    self._draw_flood(painter, blade_rect, color)
+                elif style == 'curtain':
+                    self._draw_curtain(painter, blade_rect, color)
                 elif style == 'fade_trail':
                     self._draw_fade_trail(painter, blade_rect, color)
                 elif style == 'base_flare':
@@ -1068,7 +1126,8 @@ class BladePreviewWidget(QtWidgets.QWidget):
                 else:
                     painter.fillRect(blade_rect, color)
 
-        if not grafx_handled and self._direction == -1 and style in ('sparkle_dust', 'sparkle_flake'):
+        if (not grafx_handled and self._direction == -1
+                and style in ('sparkle_dust', 'sparkle_flake', 'nova')):
             self._draw_retraction_sparkles(painter, blade_left, blade_top, blade_width, segments)
 
         if not self._lockup_engaged:

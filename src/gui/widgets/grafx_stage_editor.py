@@ -15,6 +15,8 @@ BladePreviewWidget's hilt-at-the-bottom orientation) and stages running horizont
 self._colors[pixel_index][stage_index], pixel_index 0 = hilt-end pixel (matches
 core/grafx_reader.py's BMP column convention).
 """
+import math
+
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from core import grafx_writer
@@ -23,6 +25,8 @@ from gui.widgets.widget_factory import create_rgb_picker_widget
 MAX_STAGE_COUNT = 50
 DEFAULT_CELL_WIDTH = 14   # px per stage column, before GrafxPixelEditorWindow fits it to screen
 DEFAULT_CELL_HEIGHT = 5   # px per pixel row, same
+ARC_BULGE_RATIO = 0.35    # how far the arc bows away from the straight chord, as a fraction
+                          # of the chord's length
 
 
 def _line_points(x0: int, y0: int, x1: int, y1: int):
@@ -48,12 +52,47 @@ def _line_points(x0: int, y0: int, x1: int, y1: int):
     return points
 
 
+def _arc_points(x0: int, y0: int, x1: int, y1: int, bulge_ratio: float = ARC_BULGE_RATIO):
+    """Every integer grid cell along a circular-style arc from (x0,y0) to (x1,y1) - the Arc
+    tool's counterpart to _line_points. Since a click-drag-release gesture only supplies two
+    points (not the three a circular arc needs), the arc is built as a quadratic Bezier curve
+    through a control point offset perpendicular to the chord by bulge_ratio * chord length -
+    this always bows to the same side relative to the drag direction, giving a predictable,
+    consistent curve rather than requiring a third click to set curvature."""
+    dx = x1 - x0
+    dy = y1 - y0
+    chord = math.hypot(dx, dy)
+    if chord == 0:
+        return [(x0, y0)]
+
+    perp_x, perp_y = -dy / chord, dx / chord
+    mid_x, mid_y = (x0 + x1) / 2, (y0 + y1) / 2
+    bulge = bulge_ratio * chord
+    ctrl_x, ctrl_y = mid_x + perp_x * bulge, mid_y + perp_y * bulge
+
+    steps = max(2, int((chord + bulge) * 2))
+    points = []
+    last = None
+    for i in range(steps + 1):
+        t = i / steps
+        inv = 1 - t
+        x = inv * inv * x0 + 2 * inv * t * ctrl_x + t * t * x1
+        y = inv * inv * y0 + 2 * inv * t * ctrl_y + t * t * y1
+        cell = (round(x), round(y))
+        if cell != last:
+            points.append(cell)
+            last = cell
+    return points
+
+
 class GrafxPixelGridWidget(QtWidgets.QWidget):
-    """pixel_count rows x stage_count columns of paintable color cells, with a freehand/line
-    tool and adjustable brush size."""
+    """pixel_count rows x stage_count columns of paintable color cells, with
+    freehand/line/arc tools, adjustable brush size, and a single-level undo covering
+    whichever of those painting actions was applied most recently."""
 
     cell_painted = QtCore.Signal()
     eyedropped = QtCore.Signal(QtGui.QColor)
+    undo_available_changed = QtCore.Signal(bool)
 
     def __init__(self, pixel_count: int, stage_count: int, parent=None):
         super().__init__(parent)
@@ -66,8 +105,10 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
         self._cell_height = DEFAULT_CELL_HEIGHT
         self._tool = 'freehand'
         self._brush_size = 1
-        self._line_anchor = None       # (pixel_index, stage_index) while dragging a line
-        self._line_preview_end = None
+        self._stroke_anchor = None       # (pixel_index, stage_index) while dragging a line/arc
+        self._stroke_preview_end = None
+        self._undo_snapshot = None       # full self._colors state from just before the last
+                                          # painting action, or None if there's nothing to undo
         self.setMouseTracking(False)
         self._update_size()
 
@@ -86,12 +127,36 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
 
     def set_tool(self, tool: str):
         self._tool = tool
-        self._line_anchor = None
-        self._line_preview_end = None
+        self._stroke_anchor = None
+        self._stroke_preview_end = None
         self.update()
 
     def set_brush_size(self, size: int):
         self._brush_size = max(1, size)
+
+    def push_undo_snapshot(self):
+        """Record the current colors as the one state undo() can restore. Called right before
+        any painting action mutates self._colors - freehand/line/arc strokes call this
+        themselves; external mutations (Fill All, Apply preset) call it before they mutate
+        the grid too, so every one of those counts as "the last action" for undo purposes."""
+        self._undo_snapshot = [[QtGui.QColor(c) for c in row] for row in self._colors]
+        self.undo_available_changed.emit(True)
+
+    def can_undo(self) -> bool:
+        return self._undo_snapshot is not None
+
+    def undo(self) -> bool:
+        """Reverts the last painting action, if there is one. Single-level: undo doesn't
+        stack, it just swaps back to whatever was there immediately before the most recent
+        action, and calling it again does nothing until another action is taken."""
+        if self._undo_snapshot is None:
+            return False
+        self._colors = self._undo_snapshot
+        self._undo_snapshot = None
+        self.update()
+        self.cell_painted.emit()
+        self.undo_available_changed.emit(False)
+        return True
 
     def stage_count(self) -> int:
         return self._stage_count
@@ -155,6 +220,16 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
             cells.update(self._brush_cells(p, s))
         return cells
 
+    def _arc_cells(self, p0: int, s0: int, p1: int, s1: int):
+        cells = set()
+        for s, p in _arc_points(s0, p0, s1, p1):
+            cells.update(self._brush_cells(p, s))
+        return cells
+
+    def _stroke_cells(self, p0: int, s0: int, p1: int, s1: int):
+        return self._arc_cells(p0, s0, p1, s1) if self._tool == 'arc' \
+            else self._line_cells(p0, s0, p1, s1)
+
     def _apply_paint(self, pixel_index: int, stage_index: int):
         for p, s in self._brush_cells(pixel_index, stage_index):
             self._colors[p][s] = QtGui.QColor(self._paint_color)
@@ -168,30 +243,32 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
             return
         if event.button() != QtCore.Qt.LeftButton:
             return
-        if self._tool == 'line':
-            self._line_anchor = (pixel_index, stage_index)
-            self._line_preview_end = (pixel_index, stage_index)
+        if self._tool in ('line', 'arc'):
+            self._stroke_anchor = (pixel_index, stage_index)
+            self._stroke_preview_end = (pixel_index, stage_index)
             self.update()
         else:
+            self.push_undo_snapshot()
             self._apply_paint(pixel_index, stage_index)
 
     def mouseMoveEvent(self, event):
         pixel_index, stage_index = self._cell_at(event.position().x(), event.position().y())
-        if self._tool == 'line' and self._line_anchor is not None:
-            self._line_preview_end = (pixel_index, stage_index)
+        if self._tool in ('line', 'arc') and self._stroke_anchor is not None:
+            self._stroke_preview_end = (pixel_index, stage_index)
             self.update()
         elif self._tool == 'freehand' and event.buttons() & QtCore.Qt.LeftButton:
             self._apply_paint(pixel_index, stage_index)
 
     def mouseReleaseEvent(self, event):
-        if (self._tool == 'line' and event.button() == QtCore.Qt.LeftButton
-                and self._line_anchor is not None):
-            p0, s0 = self._line_anchor
-            p1, s1 = self._line_preview_end or self._line_anchor
-            for p, s in self._line_cells(p0, s0, p1, s1):
+        if (self._tool in ('line', 'arc') and event.button() == QtCore.Qt.LeftButton
+                and self._stroke_anchor is not None):
+            p0, s0 = self._stroke_anchor
+            p1, s1 = self._stroke_preview_end or self._stroke_anchor
+            self.push_undo_snapshot()
+            for p, s in self._stroke_cells(p0, s0, p1, s1):
                 self._colors[p][s] = QtGui.QColor(self._paint_color)
-            self._line_anchor = None
-            self._line_preview_end = None
+            self._stroke_anchor = None
+            self._stroke_preview_end = None
             self.update()
             self.cell_painted.emit()
 
@@ -207,12 +284,13 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
                 painter.fillRect(self._cell_rect(pixel_index, stage_index),
                                   self._colors[pixel_index][stage_index])
 
-        if self._tool == 'line' and self._line_anchor is not None and self._line_preview_end is not None:
+        if (self._tool in ('line', 'arc') and self._stroke_anchor is not None
+                and self._stroke_preview_end is not None):
             preview_color = QtGui.QColor(self._paint_color)
             preview_color.setAlpha(160)
-            p0, s0 = self._line_anchor
-            p1, s1 = self._line_preview_end
-            for p, s in self._line_cells(p0, s0, p1, s1):
+            p0, s0 = self._stroke_anchor
+            p1, s1 = self._stroke_preview_end
+            for p, s in self._stroke_cells(p0, s0, p1, s1):
                 painter.fillRect(self._cell_rect(p, s), preview_color)
 
         painter.setPen(QtGui.QColor(60, 60, 60))
@@ -241,10 +319,16 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
 
         tool_col = QtWidgets.QVBoxLayout()
         tool_col.addWidget(QtWidgets.QLabel("Tool:"))
-        self._tool_combo = QtWidgets.QComboBox()
-        self._tool_combo.addItems(["Freehand", "Line"])
-        self._tool_combo.currentTextChanged.connect(self._on_tool_changed)
-        tool_col.addWidget(self._tool_combo)
+        self._freehand_radio = QtWidgets.QRadioButton("Freehand")
+        self._freehand_radio.setChecked(True)
+        self._line_radio = QtWidgets.QRadioButton("Line")
+        self._arc_radio = QtWidgets.QRadioButton("Arc")
+        self._freehand_radio.toggled.connect(lambda checked: checked and self._grid.set_tool('freehand'))
+        self._line_radio.toggled.connect(lambda checked: checked and self._grid.set_tool('line'))
+        self._arc_radio.toggled.connect(lambda checked: checked and self._grid.set_tool('arc'))
+        tool_col.addWidget(self._freehand_radio)
+        tool_col.addWidget(self._line_radio)
+        tool_col.addWidget(self._arc_radio)
         tools_row.addLayout(tool_col)
 
         brush_col = QtWidgets.QVBoxLayout()
@@ -270,8 +354,9 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
 
         hint = QtWidgets.QLabel(
             "Rows are blade pixels (top = tip, bottom = hilt), columns are animation stages "
-            "(left = stage 1, played first). Left-click/drag to paint (Freehand) or click-drag-"
-            "release to draw a straight line (Line), right-click to pick up a cell's color."
+            "(left = stage 1, played first). Left-click/drag to paint (Freehand), or click-"
+            "drag-release to draw a straight line (Line) or a curve (Arc); right-click to "
+            "pick up a cell's color. Ctrl+Z or the Undo button reverts the last action."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #666666; font-style: italic; font-size: 11px;")
@@ -287,6 +372,15 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         layout.addWidget(self._scroll, stretch=1)
 
         mgmt_row = QtWidgets.QHBoxLayout()
+        self._undo_button = QtWidgets.QPushButton("Undo")
+        self._undo_button.setEnabled(False)
+        self._undo_button.clicked.connect(self._grid.undo)
+        self._grid.undo_available_changed.connect(self._undo_button.setEnabled)
+        mgmt_row.addWidget(self._undo_button)
+
+        undo_shortcut = QtGui.QShortcut(QtGui.QKeySequence.Undo, self)
+        undo_shortcut.activated.connect(self._grid.undo)
+
         self._fill_button = QtWidgets.QPushButton("Fill All Stages")
         self._filled = False
         self._fill_button.clicked.connect(self._on_fill_toggle)
@@ -350,9 +444,6 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         g_spin.setValue(color.green())
         b_spin.setValue(color.blue())
 
-    def _on_tool_changed(self, text: str):
-        self._grid.set_tool('line' if text == 'Line' else 'freehand')
-
     def _on_brush_changed(self, value: int):
         self._grid.set_brush_size(value)
 
@@ -366,7 +457,9 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
 
     def _on_fill_toggle(self):
         """Toggles between filling every stage with the paint color and clearing them back
-        to black, so undoing a fill doesn't mean re-picking black and filling again."""
+        to black. Also undoable, in addition to the button's own toggle-back behavior - Ctrl+Z
+        right after clicking reverts to whatever was painted before the fill/empty."""
+        self._grid.push_undo_snapshot()
         if not self._filled:
             self._grid.fill_all(self._current_paint_color())
             self._fill_button.setText("Empty All Stages")
@@ -388,6 +481,7 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
             image = grafx_writer.generate_fire(self._width, stage_count)
         else:
             return
+        self._grid.push_undo_snapshot()
         self._grid.set_colors(self._image_to_grid(image))
         self._fill_button.setText("Fill All Stages")
         self._filled = False
@@ -413,6 +507,8 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
 class GrafxStageEditor(QtWidgets.QWidget):
     """Compact launcher embedded in the wizard page: owns the actual stage data and opens
     GrafxPixelEditorWindow to paint it."""
+
+    stage_count_changed = QtCore.Signal(int)
 
     def __init__(self, width: int, initial_stage_count: int = 10, parent=None):
         super().__init__(parent)
@@ -448,11 +544,33 @@ class GrafxStageEditor(QtWidgets.QWidget):
         dialog = GrafxPixelEditorWindow(self._width, self._stage_count, self._colors, parent=self)
         if dialog.exec() == QtWidgets.QDialog.Accepted:
             self._colors = [[QtGui.QColor(c) for c in row] for row in dialog.colors()]
-            self._stage_count = dialog.stage_count()
+            new_count = dialog.stage_count()
+            count_changed = new_count != self._stage_count
+            self._stage_count = new_count
             self._update_summary()
+            if count_changed:
+                self.stage_count_changed.emit(self._stage_count)
 
     def stage_count(self) -> int:
         return self._stage_count
+
+    def set_stage_count(self, new_count: int):
+        """Resize the painted grid to a new stage count, preserving already-painted stages
+        and filling any new ones with black - same convention as GrafxPixelGridWidget's own
+        set_stage_count, so this stays consistent with a resize done from inside the painter.
+        Lets the wizard page's "Number of stages" spinbox resize the animation directly,
+        without requiring the user to open "Edit Stages..." first."""
+        new_count = max(1, min(MAX_STAGE_COUNT, new_count))
+        if new_count == self._stage_count:
+            return
+        for row in self._colors:
+            if new_count > len(row):
+                row.extend([QtGui.QColor(0, 0, 0)] * (new_count - len(row)))
+            else:
+                del row[new_count:]
+        self._stage_count = new_count
+        self._update_summary()
+        self.stage_count_changed.emit(self._stage_count)
 
     def to_image(self) -> QtGui.QImage:
         image = QtGui.QImage(self._width, self._stage_count, QtGui.QImage.Format_RGB32)

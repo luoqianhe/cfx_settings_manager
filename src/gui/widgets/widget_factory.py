@@ -1,6 +1,6 @@
 # src/gui/widgets/widget_factory.py
 from typing import Tuple
-from PySide6 import QtWidgets, QtCore
+from PySide6 import QtWidgets, QtCore, QtGui
 from PySide6.QtWidgets import QWidget
 
 # range_pair params whose two values are independent quantities, not a min/max range - e.g.
@@ -526,6 +526,22 @@ def create_color_profile_dropdown(param_name, param_def, main_window=None):
     return container, combo
 
 
+class _ClickableSwatch(QtWidgets.QFrame):
+    """A color-preview QFrame that opens a QColorDialog on click, so the user isn't limited
+    to dragging the R/G/B sliders one channel at a time."""
+    clicked = QtCore.Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setCursor(QtCore.Qt.PointingHandCursor)
+        self.setToolTip("Click to choose a color")
+
+    def mousePressEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+
 def create_rgb_picker_widget(label: str, initial_rgb=(255, 255, 255)):
     """A plain 0-255 RGB picker: three slider+spinbox rows plus a bordered swatch preview.
     Used by the GraFx Creator wizard for preset colors - GraFx BMP pixels are literal RGB,
@@ -542,7 +558,7 @@ def create_rgb_picker_widget(label: str, initial_rgb=(255, 255, 255)):
         title.setStyleSheet("font-weight: bold;")
         layout.addWidget(title)
 
-    swatch = QtWidgets.QFrame()
+    swatch = _ClickableSwatch()
     swatch.setFixedSize(28, 28)
 
     spins = {}
@@ -550,6 +566,16 @@ def create_rgb_picker_widget(label: str, initial_rgb=(255, 255, 255)):
     def update_swatch():
         r, g, b = (spins[c].value() for c in 'RGB')
         swatch.setStyleSheet(f"background-color: rgb({r}, {g}, {b}); border: 1px solid black;")
+
+    def choose_color():
+        r, g, b = (spins[c].value() for c in 'RGB')
+        color = QtWidgets.QColorDialog.getColor(QtGui.QColor(r, g, b), swatch, "Choose Color")
+        if color.isValid():
+            spins['R'].setValue(color.red())
+            spins['G'].setValue(color.green())
+            spins['B'].setValue(color.blue())
+
+    swatch.clicked.connect(choose_color)
 
     for channel, initial in zip('RGB', initial_rgb):
         row = QtWidgets.QWidget()

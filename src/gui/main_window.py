@@ -646,64 +646,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 else:
                     print(f"Failed to load color profile {effective_color}")
 
-            # Feed the blade preview widget. It only uses a handful of clearly-documented
-            # parameters (color, qon/qoff, flkon/flkoff, style_pon/style_poff, unstable,
-            # fcolor/lcolor) - see blade_preview.py for what's approximated vs. skipped.
-            from core.color_utils import rgbw_to_rgb
-
-            def parse_rgbw(color_str, default=(200, 200, 200)):
-                try:
-                    r, g, b, w = map(int, color_str.split(','))
-                    return rgbw_to_rgb(r, g, b, w)
-                except (ValueError, AttributeError):
-                    return default
-
-            rgb = parse_rgbw(color_settings.get('color'))
-            foc_rgb = parse_rgbw(color_settings.get('fcolor'), default=(255, 255, 255))
-            lockup_rgb = parse_rgbw(color_settings.get('lcolor'), default=(255, 140, 0))
-            bolt_rgb = parse_rgbw(color_settings.get('bcolor'), default=(255, 60, 0))
-            try:
-                qon_ms = int(settings.get('qon', 300))
-            except ValueError:
-                qon_ms = 300
-            try:
-                qoff_ms = int(settings.get('qoff', 300))
-            except ValueError:
-                qoff_ms = 300
-            flicker_on = blade_settings.get('flkon') == '1'
-            flicker_off = blade_settings.get('flkoff') == '1'
-
-            # style_grafx1 (main blade) points at an indexed /extra/GRAFX folder - resolve it
-            # to an actual path so the preview can play back this font's real GraFx BMPs
-            # (style_pon/poff=GraFx sequence, style_lockup=GraFx sequence, unstable=17/18)
-            # instead of falling back to a plain color.
-            grafx_folder = None
-            try:
-                grafx_num = int(blade_settings.get('style_grafx1', -1))
-                if grafx_num >= 0:
-                    grafx_folder = self.grafx_profile_paths.get(grafx_num)
-            except ValueError:
-                pass
-
-            self.blade_preview.set_profile(
-                rgb, qon_ms, qoff_ms, flicker_on, flicker_off,
-                foc_rgb=foc_rgb, lockup_rgb=lockup_rgb,
-                pon_style_id=blade_settings.get('style_pon'),
-                poff_style_id=blade_settings.get('style_poff'),
-                unstable_id=blade_settings.get('unstable'),
-                clash_style_id=blade_settings.get('style_clash'),
-                lockup_style_id=blade_settings.get('style_lockup'),
-                pos_lockup=blade_settings.get('pos_lockup'),
-                size_lockup=blade_settings.get('size_lockup'),
-                focd_ms=blade_settings.get('focd'),
-                bolt_rgb=bolt_rgb,
-                blaster_style_id=blade_settings.get('style_blaster'),
-                grafx_folder=grafx_folder,
-                preon_style_id=blade_settings.get('style_preon'),
-                postoff_style_id=blade_settings.get('style_postoff'),
-            )
-            self.blade_preview.reset()
-
             # Global parameters live in the header of config.txt, above any [profile=] section.
             # They apply to every soundfont on the card, not just the one selected here.
             global_settings = self.file_handler.load_master_config()
@@ -735,6 +677,71 @@ class MainWindow(QtWidgets.QMainWindow):
             # not the merged all_settings)
             reference_keys = self.file_handler.load_reference_font_config_keys()
             missing_font_keys = CFXValidator.check_missing_font_config_keys(settings, reference_keys)
+
+            # Feed the blade preview widget from all_settings (not blade_settings/color_settings
+            # directly) - a font_config.txt can override a normally blade-or-color-scoped name
+            # like style_poff for just that one font, same as any other override. Reading from
+            # the unmerged per-file dicts here would silently show the pre-override blade/color
+            # value in the preview while the settings grid (which does use all_settings)
+            # correctly showed the overridden one - e.g. a font whose font_config.txt sets
+            # style_poff=0 would still preview whatever its blade profile's own style_poff was.
+            # It only uses a handful of clearly-documented parameters (color, qon/qoff,
+            # flkon/flkoff, style_pon/style_poff, unstable, fcolor/lcolor) - see blade_preview.py
+            # for what's approximated vs. skipped.
+            from core.color_utils import rgbw_to_rgb
+
+            def parse_rgbw(color_str, default=(200, 200, 200)):
+                try:
+                    r, g, b, w = map(int, color_str.split(','))
+                    return rgbw_to_rgb(r, g, b, w)
+                except (ValueError, AttributeError):
+                    return default
+
+            rgb = parse_rgbw(all_settings.get('color'))
+            foc_rgb = parse_rgbw(all_settings.get('fcolor'), default=(255, 255, 255))
+            lockup_rgb = parse_rgbw(all_settings.get('lcolor'), default=(255, 140, 0))
+            bolt_rgb = parse_rgbw(all_settings.get('bcolor'), default=(255, 60, 0))
+            try:
+                qon_ms = int(all_settings.get('qon', 300))
+            except ValueError:
+                qon_ms = 300
+            try:
+                qoff_ms = int(all_settings.get('qoff', 300))
+            except ValueError:
+                qoff_ms = 300
+            flicker_on = all_settings.get('flkon') == '1'
+            flicker_off = all_settings.get('flkoff') == '1'
+
+            # style_grafx1 (main blade) points at an indexed /extra/GRAFX folder - resolve it
+            # to an actual path so the preview can play back this font's real GraFx BMPs
+            # (style_pon/poff=GraFx sequence, style_lockup=GraFx sequence, unstable=17/18)
+            # instead of falling back to a plain color.
+            grafx_folder = None
+            try:
+                grafx_num = int(all_settings.get('style_grafx1', -1))
+                if grafx_num >= 0:
+                    grafx_folder = self.grafx_profile_paths.get(grafx_num)
+            except ValueError:
+                pass
+
+            self.blade_preview.set_profile(
+                rgb, qon_ms, qoff_ms, flicker_on, flicker_off,
+                foc_rgb=foc_rgb, lockup_rgb=lockup_rgb,
+                pon_style_id=all_settings.get('style_pon'),
+                poff_style_id=all_settings.get('style_poff'),
+                unstable_id=all_settings.get('unstable'),
+                clash_style_id=all_settings.get('style_clash'),
+                lockup_style_id=all_settings.get('style_lockup'),
+                pos_lockup=all_settings.get('pos_lockup'),
+                size_lockup=all_settings.get('size_lockup'),
+                focd_ms=all_settings.get('focd'),
+                bolt_rgb=bolt_rgb,
+                blaster_style_id=all_settings.get('style_blaster'),
+                grafx_folder=grafx_folder,
+                preon_style_id=all_settings.get('style_preon'),
+                postoff_style_id=all_settings.get('style_postoff'),
+            )
+            self.blade_preview.reset()
 
             # Update UI with shared parameter information
             self.settings_grid.update_settings(

@@ -9,7 +9,7 @@ import random
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
-from PySide6 import QtGui
+from PySide6 import QtCore, QtGui
 
 from core.grafx_reader import GRAFX_STATES
 
@@ -87,6 +87,75 @@ def generate_fire(width: int, stage_count: int, base_rgb: Optional[RGB] = None,
         heat = rng.uniform(0.4, 1.0)
         r, g, b = base_rgb
         return (r * heat, g * heat * rng.uniform(0.6, 1.0), b * heat * rng.uniform(0.0, 0.5))
+
+    return _build_stage_image(width, stage_count, pixel_fn)
+
+
+def _marquee_font(pixel_height: int) -> QtGui.QFont:
+    font = QtGui.QFont("Sans Serif")
+    font.setPixelSize(max(1, pixel_height))
+    font.setBold(True)
+    return font
+
+
+def marquee_message_width(width: int, text: str, gap_px: Optional[int] = None) -> int:
+    """Total pixel width of one full marquee cycle (rendered message + trailing blank gap)
+    at a given blade pixel count, without actually rendering the bitmap - lets the wizard's
+    "Fit Stages" control pick a stage count that covers exactly one loop."""
+    metrics = QtGui.QFontMetrics(_marquee_font(width))
+    text_width = max(1, metrics.horizontalAdvance(text or " "))
+    gap = width if gap_px is None else gap_px
+    return text_width + gap
+
+
+def _render_text_strip(width: int, text: str, fg_rgb: RGB, bg_rgb: RGB,
+                        gap_px: Optional[int] = None) -> QtGui.QImage:
+    """Renders `text` at a pixel height equal to the full blade pixel count (using all of the
+    blade's resolution to keep characters legible), as wide as the message needs plus a
+    trailing blank gap (default: one blade-width), so a looping playback doesn't jump
+    straight from the end of the message back into its own start."""
+    font = _marquee_font(width)
+    metrics = QtGui.QFontMetrics(font)
+    text_width = max(1, metrics.horizontalAdvance(text or " "))
+    gap = width if gap_px is None else gap_px
+    total_width = text_width + gap
+
+    image = QtGui.QImage(total_width, width, QtGui.QImage.Format_RGB32)
+    image.fill(QtGui.QColor(*bg_rgb))
+    painter = QtGui.QPainter(image)
+    painter.setFont(font)
+    painter.setPen(QtGui.QColor(*fg_rgb))
+    painter.drawText(QtCore.QRect(0, 0, text_width, width),
+                      QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft, text or "")
+    painter.end()
+    return image
+
+
+def generate_marquee_text(width: int, stage_count: int, text: str, fg_rgb: RGB, bg_rgb: RGB,
+                           scroll_px_per_stage: int = 3) -> QtGui.QImage:
+    """A scrolling marquee/LED-sign effect. A blade only has one spatial dimension (its
+    length), so there's no room for both real glyph height *and* horizontal scroll travel
+    along that same axis - instead, the message is rendered as a strip as tall as the full
+    blade pixel count (so characters use the blade's whole resolution) but much WIDER than
+    the blade, and each stage samples one single-pixel-wide vertical slice of that strip -
+    stage 0 at its left edge, later stages sweeping rightward through the message at
+    scroll_px_per_stage pixels/stage and wrapping back to the start once past the end. Since
+    every pixel of a given stage is drawn from the same x position (differing only by height,
+    i.e. by glyph shape), the blade shows the message's current "reading position" as a
+    whole, and stepping through stages in playback reads as the text scrolling past - the
+    same effect a persistence-of-vision/scan display gets from a 1D strip.
+
+    Pixel index 0 is the hilt end (matches every other convention in this module); row 0 of
+    the rendered strip is its top edge (where QPainter starts drawing glyphs). To keep text
+    right-side-up when the blade is held tip-up, the top of a glyph needs to land at the tip
+    (the *highest* pixel index), so pixel index is flipped when sampling the strip."""
+    strip = _render_text_strip(width, text, fg_rgb, bg_rgb)
+    total_width = strip.width()
+
+    def pixel_fn(stage, pixel):
+        x = (stage * scroll_px_per_stage) % total_width
+        color = strip.pixelColor(x, width - 1 - pixel)
+        return (color.red(), color.green(), color.blue())
 
     return _build_stage_image(width, stage_count, pixel_fn)
 

@@ -16,6 +16,7 @@ from core import grafx_writer
 from core.file_handler import CFXFileHandler
 from gui.widgets.blade_preview import BladePreviewWidget
 from gui.widgets.widget_factory import create_rgb_picker_widget
+from gui.widgets import grafx_stage_editor
 from gui.widgets.grafx_stage_editor import GrafxStageEditor
 
 DEFAULT_PIXEL_COUNT = 125  # fallback used when config.txt has no usable 'ledstrip' value
@@ -36,7 +37,7 @@ STATE_INFO = {
 STATE_ORDER = ['poweron', 'poweroff', 'leds', 'lockup', 'preon', 'postoff', 'idle', 'forever']
 DEFAULT_CHECKED_STATES = ('poweron', 'poweroff')
 ONE_SHOT_STATES = ('poweron', 'poweroff', 'preon', 'postoff')  # can meaningfully use stop=1/sync
-PRESETS = ['Solid Fade', 'Wipe', 'Flicker', 'Fire', 'Custom']
+PRESETS = ['Solid Fade', 'Wipe', 'Flicker', 'Fire', 'Marquee Text', 'Custom']
 
 # state key -> the blade-profile parameter that has to be set to "GraFx" for that state to
 # actually play back from the linked resource (STATE_INFO's third element is exactly the
@@ -299,6 +300,44 @@ class GrafxCreatorDialog(QtWidgets.QDialog):
         fire_layout.addWidget(fire_color_container)
         preset_stack.addWidget(fire_panel)
 
+        # Marquee Text: a scrolling LED-sign message, rendered tall (using the full blade
+        # pixel count for glyph height) and scrolled over time - see
+        # grafx_writer.generate_marquee_text for how a 1D blade can show 2D text at all.
+        marquee_panel = QtWidgets.QWidget()
+        marquee_layout = QtWidgets.QVBoxLayout(marquee_panel)
+        widgets['marquee_text'] = QtWidgets.QLineEdit("HELLO")
+        marquee_layout.addWidget(QtWidgets.QLabel("Message:"))
+        marquee_layout.addWidget(widgets['marquee_text'])
+
+        marquee_colors_row = QtWidgets.QHBoxLayout()
+        fg_container, widgets['marquee_fg'] = create_rgb_picker_widget("Text", (0, 200, 255))
+        bg_container, widgets['marquee_bg'] = create_rgb_picker_widget("Background", (0, 0, 0))
+        marquee_colors_row.addWidget(fg_container)
+        marquee_colors_row.addWidget(bg_container)
+        marquee_layout.addLayout(marquee_colors_row)
+
+        marquee_speed_row = QtWidgets.QHBoxLayout()
+        marquee_speed_row.addWidget(QtWidgets.QLabel("Scroll speed (pixels/stage):"))
+        widgets['marquee_speed'] = QtWidgets.QSpinBox()
+        widgets['marquee_speed'].setRange(1, 20)
+        widgets['marquee_speed'].setValue(3)
+        marquee_speed_row.addWidget(widgets['marquee_speed'])
+        fit_stages_button = QtWidgets.QPushButton("Fit Stages to Message")
+        marquee_speed_row.addWidget(fit_stages_button)
+        marquee_speed_row.addStretch()
+        marquee_layout.addLayout(marquee_speed_row)
+
+        marquee_hint = QtWidgets.QLabel(
+            "One full scroll needs Number of stages × Scroll speed pixels to cover the "
+            "whole message - if it's cut off (or the loop jumps), raise Number of stages, "
+            "raise the scroll speed, or click \"Fit Stages to Message\" to set the stage "
+            "count automatically."
+        )
+        marquee_hint.setWordWrap(True)
+        marquee_hint.setStyleSheet("color: #666666; font-style: italic; font-size: 11px;")
+        marquee_layout.addWidget(marquee_hint)
+        preset_stack.addWidget(marquee_panel)
+
         # Custom: hand-paint each stage directly, rather than generating from parameters.
         # Owns its own stage count (via Add/Delete Stage) - the "Number of stages" and
         # "Random variants" controls below are disabled while this preset is selected.
@@ -314,6 +353,13 @@ class GrafxCreatorDialog(QtWidgets.QDialog):
         widgets['stage_count_spin'].setRange(2, 400)
         widgets['stage_count_spin'].setValue(30)
         timing_form.addRow("Number of stages:", widgets['stage_count_spin'])
+
+        def _fit_marquee_stages():
+            total_width = grafx_writer.marquee_message_width(
+                self.pixel_count_spin.value(), widgets['marquee_text'].text())
+            needed = -(-total_width // widgets['marquee_speed'].value())  # ceil division
+            widgets['stage_count_spin'].setValue(max(2, min(400, needed)))
+        fit_stages_button.clicked.connect(_fit_marquee_stages)
 
         widgets['sync_check'] = QtWidgets.QCheckBox("Sync timing to sound/quick-on duration")
         widgets['sync_check'].setChecked(state in ONE_SHOT_STATES)
@@ -338,15 +384,30 @@ class GrafxCreatorDialog(QtWidgets.QDialog):
 
         layout.addLayout(timing_form)
 
-        # The Custom preset manages its own stage count and only ever produces one variant
-        # (hand-painting several full alternate animations isn't worth the UI complexity),
-        # so these two controls are irrelevant - and re-enabled again for any other preset.
+        # The Custom preset only ever produces one variant (hand-painting several full
+        # alternate animations isn't worth the UI complexity), so "Random variants" is
+        # disabled for it - but "Number of stages" stays live and two-way bound to the
+        # painter's real stage count, so the user can resize the animation either from this
+        # spinbox or from the "Edit Stages..." painter's own stage-count control.
+        widgets['stage_editor'].stage_count_changed.connect(widgets['stage_count_spin'].setValue)
+
+        def on_stage_count_spin_changed(value):
+            if PRESETS[preset_combo.currentIndex()] == 'Custom':
+                widgets['stage_editor'].set_stage_count(value)
+        widgets['stage_count_spin'].valueChanged.connect(on_stage_count_spin_changed)
+
         def on_preset_changed(index):
             is_custom = PRESETS[index] == 'Custom'
-            widgets['stage_count_spin'].setEnabled(not is_custom)
             widgets['many_spin'].setEnabled(not is_custom)
             if is_custom:
+                # The painter caps stage count at GrafxStageEditor.MAX_STAGE_COUNT (unlike
+                # the generated presets, which allow up to 400) - narrow the spinbox's range
+                # to match so it can't be set to a value the painter would silently clamp.
+                widgets['stage_count_spin'].setRange(1, grafx_stage_editor.MAX_STAGE_COUNT)
+                widgets['stage_count_spin'].setValue(widgets['stage_editor'].stage_count())
                 widgets['many_spin'].setValue(1)
+            else:
+                widgets['stage_count_spin'].setRange(2, 400)
         preset_combo.currentIndexChanged.connect(on_preset_changed)
 
         if state == 'forever':
@@ -491,6 +552,11 @@ class GrafxCreatorDialog(QtWidgets.QDialog):
         if preset == 'Fire':
             return grafx_writer.generate_fire(
                 width, stage_count, self._rgb_from(widgets['fire_color']), seed=seed)
+        if preset == 'Marquee Text':
+            return grafx_writer.generate_marquee_text(
+                width, stage_count, widgets['marquee_text'].text(),
+                self._rgb_from(widgets['marquee_fg']), self._rgb_from(widgets['marquee_bg']),
+                scroll_px_per_stage=widgets['marquee_speed'].value())
         if preset == 'Custom':
             return widgets['stage_editor'].to_image()
         raise ValueError(f"Unknown preset: {preset}")
