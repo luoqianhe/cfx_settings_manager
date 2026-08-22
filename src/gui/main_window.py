@@ -807,14 +807,29 @@ class MainWindow(QtWidgets.QMainWindow):
             if current_item:
                 self.on_font_selected(current_item)
                 if apply_specs:
-                    for param_name, value in apply_specs.items():
-                        self.settings_grid.set_parameter_value(param_name, value)
-                    QtWidgets.QMessageBox.information(
-                        self, "GraFx Resource Linked",
-                        "The new GraFx resource has been linked to this font in the settings "
-                        "grid below. Nothing has been written to disk yet - review the "
-                        "highlighted parameters and click Save Changes when you're ready."
-                    )
+                    # set_parameter_value can fail to find a widget for a param that isn't
+                    # currently displayed - e.g. a blade profile/font that has never set
+                    # unstable or style_grafx1/2/3 before won't show them in the grid at all,
+                    # since it only renders params actually present in the loaded settings.
+                    # Report that instead of claiming success while quietly doing nothing.
+                    failed = [param_name for param_name, value in apply_specs.items()
+                              if not self.settings_grid.set_parameter_value(param_name, value)]
+                    if failed:
+                        QtWidgets.QMessageBox.warning(
+                            self, "Couldn't Fully Link GraFx Resource",
+                            "The GraFx resource was created, but these parameters aren't "
+                            "currently shown for this font/blade profile, so they couldn't be "
+                            "set automatically:\n\n" + ", ".join(failed) +
+                            "\n\nYou'll need to add and set them by hand (they may need to be "
+                            "added to font_config.txt or the blade profile first)."
+                        )
+                    else:
+                        QtWidgets.QMessageBox.information(
+                            self, "GraFx Resource Linked",
+                            "The new GraFx resource has been linked to this font in the settings "
+                            "grid below. Nothing has been written to disk yet - review the "
+                            "highlighted parameters and click Save Changes when you're ready."
+                        )
 
     def load_cfx_folder(self, folder_path):
         try:
@@ -1177,6 +1192,13 @@ class MainWindow(QtWidgets.QMainWindow):
                     self._backup_file(self.folder_path / "config.txt", font_name)
                     if not self.file_handler.save_master_config(existing_global):
                         raise Exception("Failed to save global configuration")
+
+                # Re-read everything from disk and re-feed the settings grid/blade preview,
+                # the same refresh that happens when re-selecting this font from the list.
+                # Without this, the preview keeps showing whatever it was rendering before
+                # the save - e.g. a newly-linked GraFx idle animation wouldn't appear until
+                # the user clicked away to another font and back.
+                self.on_font_selected(current_item)
 
                 QtWidgets.QMessageBox.information(
                     self,

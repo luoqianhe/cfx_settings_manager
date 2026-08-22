@@ -543,7 +543,13 @@ class BladePreviewWidget(QtWidgets.QWidget):
         style = self._current_style()
         fill = self._fill
 
-        if style in ('lightstick', 'flare'):
+        # Lightstick is the only style_pon/style_poff option whose own description says
+        # "scrolling disabled" - every other style, including 'flare' (Simple flare), still
+        # extends/retracts normally; the named style is a color/effect overlay on top of that
+        # motion, not a replacement for it. 'flare's "over the whole blade" wording contrasts
+        # it with 'base_flare's "to the base of the blade only" - i.e. it's describing how much
+        # of the currently-lit length gets the FoC tint, not whether the blade scrolls at all.
+        if style == 'lightstick':
             return [QtCore.QRect(left, top, width, full_h)], fill
 
         if style == 'inverted':
