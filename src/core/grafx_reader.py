@@ -145,3 +145,94 @@ def stage_color(image: QtGui.QImage, stage_index: int, column_frac: float) -> Qt
     row = image.height() - 1 - stage_index
     col = max(0, min(image.width() - 1, int(round(column_frac * (image.width() - 1)))))
     return QtGui.QColor(image.pixel(col, row))
+
+
+_PREFIX_TO_STATE = {prefix: state for state, (_section, prefix) in GRAFX_STATES.items()}
+_BMP_NAME_RE = re.compile(r'^([a-z]+)(\d+)\.bmp$', re.IGNORECASE)
+
+
+class GrafxFileEntry:
+    """One BMP file found in a GraFx resource folder, for the resource editor's file list -
+    unlike load_grafx_state (which picks a random variant, as playback does), this names one
+    exact file so it can be opened and saved back individually."""
+    __slots__ = ('state', 'variant', 'path')
+
+    def __init__(self, state: str, variant: int, path: Path):
+        self.state = state
+        self.variant = variant
+        self.path = path
+
+
+def list_grafx_files(folder: Path) -> list:
+    """Every recognised <prefix><N>.bmp in a resource folder, sorted by GRAFX_STATES order
+    then variant number. Files whose prefix isn't a known state (stray BMPs) are skipped."""
+    entries = []
+    if folder is None or not folder.is_dir():
+        return entries
+    for path in folder.iterdir():
+        m = _BMP_NAME_RE.match(path.name)
+        if not m or not path.is_file():
+            continue
+        state = _PREFIX_TO_STATE.get(m.group(1).lower())
+        if state is None:
+            continue
+        entries.append(GrafxFileEntry(state, int(m.group(2)), path))
+    order = list(GRAFX_STATES)
+    entries.sort(key=lambda e: (order.index(e.state), e.variant))
+    return entries
+
+
+def section_settings(folder: Path, state: str) -> Optional[dict]:
+    """The active (not ##-commented) grafx1.txt section for a state as {key: value}, or None
+    if the section is absent/commented out. Also returns a parsed 'accents_count' - the
+    length of the accents=aaa... string, i.e. how many pixels the section declares, which the
+    BMPs' width is supposed to match."""
+    if state not in GRAFX_STATES or folder is None:
+        return None
+    section = parse_grafx_config(folder / 'grafx1.txt').get(GRAFX_STATES[state][0])
+    if section is None:
+        return None
+    result = dict(section)
+    accents = section.get('accents')
+    result['accents_count'] = len(accents) if accents else None
+    return result
+
+
+_DISABLED_HEADER_RE = re.compile(r'^##\s*\[(\w+)\]\s*$')
+_DISABLED_PARAM_RE = re.compile(r'^##\s*([A-Za-z_]\w*)\s*=(.*)$')
+
+
+def section_status(folder: Path, state: str) -> str:
+    """'active', 'disabled' (only present as a ##[SECTION] commented-out block, like the
+    stock [FOREVER]) or 'missing'."""
+    if state not in GRAFX_STATES or folder is None:
+        return 'missing'
+    section_name = GRAFX_STATES[state][0]
+    if section_name in parse_grafx_config(folder / 'grafx1.txt'):
+        return 'active'
+    return 'disabled' if disabled_section_values(folder, state) is not None else 'missing'
+
+
+def disabled_section_values(folder: Path, state: str) -> Optional[dict]:
+    """The key=value lines of a ##-commented-out section (with one level of ## removed), so
+    a disabled section's settings can still be shown - or None if there's no such block."""
+    section_name = GRAFX_STATES[state][0]
+    try:
+        lines = (folder / 'grafx1.txt').read_text(errors='replace').splitlines()
+    except OSError:
+        return None
+    values = None
+    for raw_line in lines:
+        line = raw_line.strip()
+        header = _DISABLED_HEADER_RE.match(line) or _SECTION_RE.match(line)
+        if header:
+            if values is not None:
+                break
+            if line.startswith('#') and header.group(1).upper() == section_name:
+                values = {}
+            continue
+        if values is not None:
+            m = _DISABLED_PARAM_RE.match(line)
+            if m and not line.startswith('####'):
+                values[m.group(1).lower()] = m.group(2).strip()
+    return values

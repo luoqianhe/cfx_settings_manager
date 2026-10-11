@@ -1,0 +1,241 @@
+{
+    "_comment": "Per-section parameters of a GraFx resource's grafx1.txt (/extra/GRAFX/<n>-name/). Same entry format as parameters.json so widget_factory.create_parameter_widget can render them. 'relevant_attributes': the accents= attribute characters that make this parameter do anything (empty = always relevant). 'relevant_states': the sections where it applies (absent = all). Source: CFX manual rev 1.19, 'GraFx parameters' and 'GraFx pixel attributes' (p.172-174). 'default': the value a parameter starts at when it's first switched on in the editor (not a firmware default).",
+    "parameters": {
+        "delay": {
+            "type": "integer",
+            "range": [
+                0,
+                10000
+            ],
+            "display_type": "spinner",
+            "description": "Milliseconds per stage (BMP line) - the frame rate of the sequenced animation, and the duration of each morphing step. Unset or 0: playback speed is adjusted automatically to the duration of the sound fx (or quick-on) for perfect synchronization. In practice it's capped at the refreshfx rate (~10 ms).",
+            "default": 20
+        },
+        "many": {
+            "type": "integer",
+            "range": [
+                1,
+                99
+            ],
+            "display_type": "spinner",
+            "description": "How many BMP files exist for this state (<prefix>1.bmp, <prefix>2.bmp, ...). The board picks one at random each time the state is entered, but only within this count - it doesn't scan the folder, so extra files beyond it never play.",
+            "default": 1
+        },
+        "stop": {
+            "type": "integer",
+            "range": [
+                0,
+                1
+            ],
+            "display_type": "toggle",
+            "values": {
+                "0": "Loop",
+                "1": "Stop after playing"
+            },
+            "description": "Stop at the end of the BMP instead of looping - for transient effects like power on/off and pre-on/post-off. For a frame-accurate pre-on, stop=1 also prevents rolling back to the start if timing rounding leaves a frame over.",
+            "relevant_states": [
+                "poweron",
+                "poweroff",
+                "preon",
+                "postoff"
+            ],
+            "default": 1
+        },
+        "accpulsed": {
+            "type": "integer",
+            "range": [
+                0,
+                100
+            ],
+            "display_type": "spinner",
+            "description": "Self-pulsing pixels depth: how deep the pulsing dims the pixel color. Works the same as the regular accent LEDs.",
+            "relevant_attributes": "~^BIXLST",
+            "default": 90
+        },
+        "accpulsel": {
+            "type": "integer",
+            "range": [
+                0,
+                60000
+            ],
+            "display_type": "spinner",
+            "description": "Self-pulsing period in milliseconds (one full up-down cycle).",
+            "relevant_attributes": "~^BIXLST",
+            "default": 1000
+        },
+        "magiclow": {
+            "type": "integer",
+            "range": [
+                0,
+                50000
+            ],
+            "display_type": "spinner",
+            "description": "Black / dark level of magnetic-field-controlled pixels (M, C, S, T, A attributes; 9-axis CFX only). Brightness is mapped from {magiclow ; magic score} to {0 ; 100}%. Below the quiescent magic score, the pixels shine without 'force activation'; the higher it is, the closer the magnet has to be. Check the live score with the serial command logmagic=1.",
+            "relevant_attributes": "MCSTA",
+            "default": 0
+        },
+        "colorshift_intensity": {
+            "type": "integer",
+            "range": [
+                0,
+                255
+            ],
+            "display_type": "spinner",
+            "description": "For color shifting pixels (H attribute): how much of the blade color is mixed over the white pixels of the BMP.",
+            "relevant_attributes": "H",
+            "default": 128
+        },
+        "colorshift_threshold": {
+            "type": "integer",
+            "range": [
+                0,
+                255
+            ],
+            "display_type": "spinner",
+            "description": "For color shifting pixels (H attribute): how much dark detail is preserved. Start around 10-20.",
+            "relevant_attributes": "H",
+            "default": 15
+        },
+        "power": {
+            "type": "integer",
+            "range": [
+                0,
+                100
+            ],
+            "display_type": "spinner",
+            "description": "Local brightness of the sequence. On a GraFx blade this only applies to the blade-off IDLE sequence - the other sequences' brightness comes from the blade profile's bladepower and the global masterpower.",
+            "relevant_states": [
+                "idle"
+            ],
+            "default": 100
+        }
+    },
+    "attributes": {
+        "a": {
+            "name": "Sequenced",
+            "group": "sequenced",
+            "description": "Regular sequenced pixel - color comes straight from the BMP, changing instantly at each stage."
+        },
+        "m": {
+            "name": "Morphing",
+            "group": "morphing",
+            "description": "Morphing pixel - fades progressively from one stage's color to the next over the stage duration (10 ms steps)."
+        },
+        "r": {
+            "name": "Random RGB",
+            "group": "random",
+            "description": "Random color each stage, picked totally randomly over RGB values."
+        },
+        "R": {
+            "name": "Random wheel",
+            "group": "random",
+            "description": "Random color each stage, picked from the 256-color wheel at max brightness (rainbow)."
+        },
+        "~": {
+            "name": "Pulse",
+            "group": "pulse",
+            "description": "Self-pulsing, using the BMP pixel color (accpulsed depth, accpulsel period). The color can change over time in the BMP."
+        },
+        "^": {
+            "name": "Pulse inverted",
+            "group": "pulse",
+            "description": "Same as ~ with an inverted variation."
+        },
+        "B": {
+            "name": "Pulse blade color",
+            "group": "pulse",
+            "description": "Self-pulsing using the blade color only (follows color profile changes)."
+        },
+        "I": {
+            "name": "Pulse blade color inv.",
+            "group": "pulse",
+            "description": "Self-pulsing with the blade color, inverted."
+        },
+        "X": {
+            "name": "Pulse crystal color",
+            "group": "pulse",
+            "description": "Self-pulsing using the crystal color only (follows color profile changes)."
+        },
+        "L": {
+            "name": "Pulse crystal color inv.",
+            "group": "pulse",
+            "description": "Self-pulsing with the crystal color, inverted."
+        },
+        "@": {
+            "name": "Audio flicker",
+            "group": "audio",
+            "description": "Flickers on the audio beat - volume controls brightness, the BMP controls the color."
+        },
+        "#": {
+            "name": "Audio flicker inverted",
+            "group": "audio",
+            "description": "Reverse audio flicker - the beat dims the pixel. Color from the BMP."
+        },
+        "*": {
+            "name": "Audio flicker blade color",
+            "group": "audio",
+            "description": "Audio flicker applied to the blade color (color profile)."
+        },
+        "$": {
+            "name": "Audio flicker crystal color",
+            "group": "audio",
+            "description": "Audio flicker applied to the crystal color (color profile)."
+        },
+        "s": {
+            "name": "Ledstrip mirror",
+            "group": "mirror",
+            "description": "Uses the color of pixel #1 of the main blade."
+        },
+        "p": {
+            "name": "PLI single pixel",
+            "group": "pli",
+            "description": "PLI indicator on one pixel - green, yellow, orange, red over the PLI scale."
+        },
+        "P": {
+            "name": "PLI range",
+            "group": "pli",
+            "description": "PLI over a range of pixels - turns BMP pixels on/off depending on PLI voltage vs. the scale defined by the BMP."
+        },
+        "M": {
+            "name": "Magnetic blade color",
+            "group": "magnetic",
+            "description": "Magic score mapped to the blade color brightness (9-axis CFX only; dark level set by magiclow)."
+        },
+        "C": {
+            "name": "Magnetic crystal color",
+            "group": "magnetic",
+            "description": "Magic score blends the crystal color."
+        },
+        "S": {
+            "name": "Magnetic pulse blade",
+            "group": "magnetic",
+            "description": "Magnetic field controls blade color self-pulsing."
+        },
+        "T": {
+            "name": "Magnetic pulse crystal",
+            "group": "magnetic",
+            "description": "Magnetic field controls crystal color self-pulsing."
+        },
+        "A": {
+            "name": "Magnetic reveal",
+            "group": "magnetic",
+            "description": "Magic score controls the brightness of the BMP sequence - a stronger field reveals the animated pixels."
+        },
+        "H": {
+            "name": "Color shift",
+            "group": "colorshift",
+            "description": "White BMP pixels are replaced dynamically with the blade color (colorshift_intensity / colorshift_threshold)."
+        }
+    },
+    "attribute_groups": {
+        "sequenced": "#8c8c8c",
+        "morphing": "#3b7dd8",
+        "random": "#9b59b6",
+        "pulse": "#27ae60",
+        "audio": "#e67e22",
+        "mirror": "#16a5a5",
+        "pli": "#d4b106",
+        "magnetic": "#d64541",
+        "colorshift": "#e84393"
+    }
+}

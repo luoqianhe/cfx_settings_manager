@@ -18,6 +18,7 @@ from gui.widgets.blade_preview import BladePreviewWidget
 from gui.widgets.widget_factory import create_rgb_picker_widget
 from gui.widgets import grafx_stage_editor
 from gui.widgets.grafx_stage_editor import GrafxStageEditor
+from gui.widgets.grafx_parameter_panel import GrafxSectionEditor
 
 DEFAULT_PIXEL_COUNT = 125  # fallback used when config.txt has no usable 'ledstrip' value
 
@@ -420,10 +421,38 @@ class GrafxCreatorDialog(QtWidgets.QDialog):
             warning.setStyleSheet("color: #B00020; font-style: italic; font-size: 11px;")
             layout.addWidget(warning)
 
+        # Everything else grafx1.txt can hold for this section (accents=, pulse/magnetic/
+        # color-shift params, power) - collapsed by default; delay/many/stop stay above.
+        advanced_toggle = QtWidgets.QToolButton()
+        advanced_toggle.setText("Advanced parameters (accents, pulsing, magnetic, …)")
+        advanced_toggle.setCheckable(True)
+        advanced_toggle.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
+        advanced_toggle.setArrowType(QtCore.Qt.RightArrow)
+        advanced_toggle.setStyleSheet("QToolButton { border: none; font-weight: bold; }")
+        section_editor = GrafxSectionEditor(state, exclude=('delay', 'many', 'stop'))
+        pixel_count = self.pixel_count_spin.value()
+        section_editor.load({'accents': 'a' * pixel_count},
+                            {'blade pixel count': pixel_count})
+        section_editor.setVisible(False)
+
+        def on_advanced_toggled(checked):
+            advanced_toggle.setArrowType(QtCore.Qt.DownArrow if checked else QtCore.Qt.RightArrow)
+            section_editor.setVisible(checked)
+        advanced_toggle.toggled.connect(on_advanced_toggled)
+        layout.addWidget(advanced_toggle)
+        layout.addWidget(section_editor)
+        widgets['section_editor'] = section_editor
+
         layout.addStretch()
 
         self.state_widgets[state] = widgets
-        return page
+        # Scrollable, since the advanced section is taller than the wizard when expanded.
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(page)
+        return scroll
 
     def _selected_states(self):
         return [s for s in STATE_ORDER if self.state_checks[s].isChecked()]
@@ -567,11 +596,15 @@ class GrafxCreatorDialog(QtWidgets.QDialog):
         variants = [self._generate_image(state, seed=random.randint(0, 1_000_000))
                     for _ in range(many)]
         delay_ms = None if widgets['sync_check'].isChecked() else widgets['delay_spin'].value()
+        advanced = widgets['section_editor'].values()
+        accents = advanced.pop('accents', None)
         return {
             'image_variants': variants,
             'delay_ms': delay_ms,
             'many': many,
             'stop': widgets['stop_check'].isChecked(),
+            'accents': accents,
+            'extra_params': advanced,
         }
 
     def _on_preview_clicked(self):

@@ -6,6 +6,8 @@ stage/row convention, same section-name/file-prefix table (GRAFX_STATES) - so an
 here round-trips cleanly back through grafx_reader.load_grafx_state().
 """
 import random
+import re
+import shutil
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
@@ -163,7 +165,8 @@ def generate_marquee_text(width: int, stage_count: int, text: str, fg_rgb: RGB, 
 def write_grafx_resource(folder: Path, state_specs: dict) -> None:
     """Write a complete GraFx resource folder from {state: spec} entries, where state is one
     of grafx_reader.GRAFX_STATES's keys and spec is:
-        {'image_variants': [QImage, ...], 'delay_ms': int|None, 'many': int, 'stop': bool}
+        {'image_variants': [QImage, ...], 'delay_ms': int|None, 'many': int, 'stop': bool,
+         'accents': str (optional), 'extra_params': {key: value} (optional - accpulsed etc.)}
     len(image_variants) should equal 'many' - one randomly-chosen variant is played back each
     time the state is entered (see grafx_reader._pick_bmp_path). delay_ms of None omits the
     'delay' key entirely, matching the format's "sync playback to the sound/quick-on
@@ -181,12 +184,16 @@ def write_grafx_resource(folder: Path, state_specs: dict) -> None:
             image.save(str(folder / f"{file_prefix}{i}.bmp"), "BMP")
 
         lines.append(f"[{section_name}]")
+        if spec.get('accents'):
+            lines.append(f"accents={spec['accents']}")
         if spec.get('delay_ms'):
             lines.append(f"delay={int(spec['delay_ms'])}")
         if len(images) > 1:
             lines.append(f"many={len(images)}")
         if spec.get('stop'):
             lines.append("stop=1")
+        for key, value in spec.get('extra_params', {}).items():
+            lines.append(f"{key}={value}")
         lines.append("")
 
     (folder / 'grafx1.txt').write_text("\n".join(lines) + "\n")
@@ -214,3 +221,144 @@ def sanitize_folder_name(name: str) -> str:
     """Make a user-typed resource name safe to use as (part of) a folder name."""
     cleaned = "".join(c if (c.isalnum() or c in "-_") else "_" for c in name.strip())
     return cleaned or "GRAFX"
+
+
+def save_bmp(image: QtGui.QImage, path: Path) -> bool:
+    """Save a GraFx BMP as 24-bit color (the format the board expects). Qt writes 24 bpp for
+    RGB32 images, so normalise to that first in case the source carried an alpha channel."""
+    return image.convertToFormat(QtGui.QImage.Format_RGB32).save(str(path), "BMP")
+
+
+_SECTION_HEADER_RE = re.compile(r'^\[(\w+)\]$')
+
+
+def update_config_section(txt_path: Path, section_name: str, updates: dict) -> None:
+    """Edit individual key=value lines of one grafx1.txt section in place, leaving every
+    other line (comments, accents=..., other sections, ##-disabled params) and the file's
+    line endings untouched - unlike write_grafx_resource, which regenerates the whole file.
+
+    updates: {key: value_str or None}. A string sets the key (replacing the active line, or
+    re-enabling a '##key=' line in that section, or inserting a new line after the section's
+    last line). None disables the key by commenting its active line out with '##', the same
+    convention the stock files use. A section that doesn't exist (or is only commented out)
+    is appended as a new active section at the end of the file."""
+    try:
+        raw = txt_path.read_bytes().decode('utf-8', errors='replace')
+    except OSError:
+        raw = ''
+    newline = '\r\n' if '\r\n' in raw else '\n'
+    lines = raw.splitlines()
+    target = section_name.upper()
+
+    # [start, end) line range of the active section (end = next header or EOF)
+    start = end = None
+    for i, line in enumerate(lines):
+        m = _SECTION_HEADER_RE.match(line.strip())
+        if m:
+            if start is not None:
+                end = i
+                break
+            if m.group(1).upper() == target:
+                start = i
+    if start is not None and end is None:
+        end = len(lines)
+
+    if start is None:
+        new_lines = [f"{key}={value}" for key, value in updates.items() if value is not None]
+        if lines and lines[-1].strip():
+            lines.append('')
+        lines.append(f"[{target}]")
+        lines.extend(new_lines)
+        lines.append('')
+        txt_path.write_bytes((newline.join(lines) + newline).encode('utf-8'))
+        return
+
+    # Last key=value line (active or ##-disabled) in the section, so inserted keys go right
+    # after its settings - not after blank separators or free-text comments like
+    # "## TO COME PRE-ON & POST-OFF here" that sit before the next header.
+    last_content = start
+    for i in range(start + 1, end):
+        stripped = lines[i].strip()
+        if re.match(r'^(##\s*)?[A-Za-z_]\w*\s*=', stripped):
+            last_content = i
+
+    for key, value in updates.items():
+        key = key.lower()
+        active_i = commented_i = None
+        for i in range(start + 1, end):
+            stripped = lines[i].strip()
+            if stripped.startswith('#'):
+                body = stripped.lstrip('#').strip()
+                if body.partition('=')[0].strip().lower() == key and '=' in body:
+                    commented_i = i if commented_i is None else commented_i
+            elif '=' in stripped and stripped.partition('=')[0].strip().lower() == key:
+                active_i = i
+        if value is None:
+            if active_i is not None:
+                lines[active_i] = '##' + lines[active_i].strip()
+        elif active_i is not None:
+            lines[active_i] = f"{key}={value}"
+        elif commented_i is not None:
+            lines[commented_i] = f"{key}={value}"
+        else:
+            last_content += 1
+            lines.insert(last_content, f"{key}={value}")
+            end += 1
+
+    txt_path.write_bytes((newline.join(lines) + newline).encode('utf-8'))
+
+
+def duplicate_grafx_resource(source: Path, grafx_root: Path, name: str) -> Path:
+    """Copy a whole resource folder to the next free '<n>-name' slot under grafx_root and
+    return the new folder. The original is never touched."""
+    index = next_available_grafx_index(grafx_root)
+    dest = grafx_root / f"{index}-{sanitize_folder_name(name)}"
+    shutil.copytree(source, dest)
+    return dest
+
+
+_PARAM_LINE_RE = re.compile(r'^[A-Za-z_]\w*\s*=')
+_DISABLED_LINE_RE = re.compile(r'^##(\s*\[\w+\]|\s*[A-Za-z_]\w*\s*=|##)')
+
+
+def set_section_enabled(txt_path: Path, section_name: str, enabled: bool) -> bool:
+    """Comment a whole section out with '##' (like the stock disabled [FOREVER] block), or
+    bring a commented-out one back. Only the header and key=value lines are touched - free
+    text comments stay as they are. A param line that was already disabled gets a second
+    '##' when its section is disabled, so re-enabling the section restores it as still
+    disabled rather than switching it on. Returns False if there was nothing to change."""
+    try:
+        raw = txt_path.read_bytes().decode('utf-8', errors='replace')
+    except OSError:
+        return False
+    newline = '\r\n' if '\r\n' in raw else '\n'
+    lines = raw.splitlines()
+    target = section_name.upper()
+    header_re = re.compile(r'^(##\s*)?\[(\w+)\]\s*$')
+
+    start = None
+    for i, line in enumerate(lines):
+        m = header_re.match(line.strip())
+        if m and m.group(2).upper() == target and bool(m.group(1)) == enabled:  # commented iff enabling
+            start = i
+            break
+    if start is None:
+        return False
+
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if header_re.match(lines[i].strip()):
+            end = i
+            break
+
+    for i in range(start, end):
+        stripped = lines[i].strip()
+        if enabled:
+            if _DISABLED_LINE_RE.match(stripped):
+                lines[i] = stripped[2:].lstrip() if stripped[2:3] != '#' else stripped[2:]
+        elif i == start or _PARAM_LINE_RE.match(stripped) or \
+                re.match(r'^##\s*[A-Za-z_]\w*\s*=', stripped):
+            lines[i] = '##' + stripped
+
+    txt_path.write_bytes((newline.join(lines) + newline).encode('utf-8'))
+    return True

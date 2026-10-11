@@ -106,6 +106,12 @@ class MainWindow(QtWidgets.QMainWindow):
         grafx_creator_button.clicked.connect(self.open_grafx_creator)
         left_layout.addWidget(grafx_creator_button)
 
+        # Opens the GraFx resource editor - edit the BMPs/settings of existing resources
+        grafx_editor_button = QtWidgets.QPushButton("Edit GraFx Resources...")
+        grafx_editor_button.setFixedWidth(250)
+        grafx_editor_button.clicked.connect(self.open_grafx_editor)
+        left_layout.addWidget(grafx_editor_button)
+
         # Soundfont header
         header_label = QtWidgets.QLabel("Soundfont Folders")
         header_label.setStyleSheet("""
@@ -858,6 +864,31 @@ class MainWindow(QtWidgets.QMainWindow):
                     "The new GraFx resource has been linked to this font in the settings "
                     "grid below. Nothing has been written to disk yet - review the "
                     "highlighted parameters and click Save Changes when you're ready."
+                )
+
+    def open_grafx_editor(self):
+        """Open the GraFx resource editor on the existing /extra/GRAFX resources. Copies it
+        makes are new resource folders, so rescan afterwards to make them selectable in the
+        style_grafx1/2/3 dropdowns."""
+        if not self.folder_path:
+            QtWidgets.QMessageBox.information(
+                self, "No Folder Loaded",
+                "Select a CFX root folder first."
+            )
+            return
+        from gui.grafx_resource_editor_dialog import GrafxResourceEditorDialog
+        dialog = GrafxResourceEditorDialog(self.folder_path, main_window=self)
+        dialog.exec()
+        if dialog.changed_folders:
+            self._reload_grafx_profiles()
+            copies = sorted(folder.name for folder in dialog.session_copies)
+            if copies:
+                QtWidgets.QMessageBox.information(
+                    self, "GraFx Copies Created",
+                    "Your edits were saved to these new resources (the originals are "
+                    "unchanged):\n\n" + "\n".join(copies) +
+                    "\n\nTo use one, set style_grafx1/2/3 to its number for the font, then "
+                    "Save Changes."
                 )
 
     def load_cfx_folder(self, folder_path):
