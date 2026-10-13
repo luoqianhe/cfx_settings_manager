@@ -25,6 +25,7 @@ import random
 from PySide6 import QtCore, QtGui, QtMultimedia, QtWidgets
 
 from core import grafx_writer
+from core.sound_player import route_to_default_output
 from gui.widgets.widget_factory import create_rgb_picker_widget
 
 MAX_STAGE_COUNT = 2000    # painter limit (wizard 'Custom' and resource editor) - stock
@@ -227,7 +228,8 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
         self._stroke_preview_end = None
         self._last_freehand = None       # previous cell of a freehand drag, to join gaps
         self._last_painted = None        # last freehand cell, kept for Shift-click lines
-        self._gradient_color = QtGui.QColor(0, 0, 0)   # Color 2; _paint_color is Color 1
+        self._gradient_start_color = QtGui.QColor(255, 255, 255)   # gradient Color 1
+        self._gradient_color = QtGui.QColor(0, 0, 0)                # gradient Color 2
         self._gradient_spread = 'none'
         self._arc_flip_h = False         # mirror the arc tool's bulge left/right
         self._arc_flip_v = False         # mirror the arc tool's bulge up/down
@@ -266,8 +268,9 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
     def set_brush_size(self, size: int):
         self._brush_size = max(1, size)
 
-    def set_gradient_color(self, color: QtGui.QColor):
-        self._gradient_color = QtGui.QColor(color)
+    def set_gradient_colors(self, color1: QtGui.QColor, color2: QtGui.QColor):
+        self._gradient_start_color = QtGui.QColor(color1)
+        self._gradient_color = QtGui.QColor(color2)
         self.update()
 
     def set_gradient_spread(self, spread: str):
@@ -521,7 +524,7 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
         gradient = QtGui.QLinearGradient(
             s0 + 0.5 - region.x(), top - p0 + 0.5 - region.y(),
             s1 + 0.5 - region.x(), top - p1 + 0.5 - region.y())
-        gradient.setColorAt(0.0, self._paint_color)
+        gradient.setColorAt(0.0, self._gradient_start_color)
         gradient.setColorAt(1.0, self._gradient_color)
         gradient.setSpread(GRADIENT_SPREADS[self._gradient_spread])
         image = QtGui.QImage(region.size(), QtGui.QImage.Format_RGB32)
@@ -826,8 +829,24 @@ class PainterDocument:
 SEQUENCE_ORDER = [('forever', 'loop'), ('preon', 'once'), ('poweron', 'once'),
                   ('leds', 'loop'), ('lockup', 'loop'), ('poweroff', 'once'),
                   ('postoff', 'once'), ('idle', 'loop')]
-SEQUENCE_OPTIONAL = {'lockup': "Lockup", 'idle': "Idle (blade off)",
-                     'forever': "Forever (replaces everything else)"}
+SEQUENCE_LABELS = {'preon': "Pre-On", 'poweron': "Power On", 'leds': "Idle (lit)",
+                   'lockup': "Lockup", 'poweroff': "Power Off", 'postoff': "Post-Off",
+                   'idle': "Idle (blade off)", 'forever': "Forever (plays alone)"}
+SEQUENCE_DEFAULT = ('preon', 'poweron', 'leds', 'poweroff', 'postoff')
+_PREVIEW_STATES_KEY = "grafx_preview_states"   # QSettings: the last states picked
+
+
+class _StickyMenu(QtWidgets.QMenu):
+    """A menu whose checkable items toggle without closing it, so several can be
+    ticked in one go."""
+
+    def mouseReleaseEvent(self, event):
+        action = self.activeAction()
+        if action is not None and action.isCheckable() and action.isEnabled():
+            action.trigger()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 SEQUENCE_LOOP_MS = 2500
 SEQUENCE_OFF_MS = 700
 
@@ -892,6 +911,7 @@ class GrafxSequencePreview(QtWidgets.QWidget):
                 and (restart or self._stage == 0):
             path, sound_ms = random.choice(segment['sounds'])
             self._sound.stop()
+            route_to_default_output(self._sound)
             self._sound.setSource(QtCore.QUrl.fromLocalFile(str(path)))
             self._sound.play()
         if segment is not None and segment.get('delay_fn') is not None:
@@ -1005,6 +1025,7 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
             documents = [PainterDocument('main', subject or "Animation", bmp_image,
                                          delay_ms=preview_delay_ms, warning=warning)]
         self._documents = list(documents)
+        self._building_preview_menu = True     # don't save/rebuild while setting up
         self._timing = timing   # core.grafx_timing.FontTiming: sounds + refreshfx, or None
         self._max_stages = max([max_stages] + [d.display_image().width() for d in self._documents])
         self._doc = None
@@ -1041,19 +1062,25 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
 
         tools_row = QtWidgets.QHBoxLayout()
 
-        color_container, self._color_widgets = create_rgb_picker_widget(
-            "Paint color (Color 1)", (255, 255, 255))
+        self._paint_container, self._color_widgets = create_rgb_picker_widget(
+            "Paint color", (255, 255, 255))
+        self._paint_container.setToolTip("Used by Freehand, Line, Arc, Fill All Stages and "
+                                         "the presets. Not used by the Gradient tool.")
         r_spin, g_spin, b_spin, _swatch = self._color_widgets
         for spin in (r_spin, g_spin, b_spin):
             spin.valueChanged.connect(self._sync_paint_color)
-        tools_row.addWidget(color_container)
+        tools_row.addWidget(self._paint_container)
 
-        gradient_col = QtWidgets.QVBoxLayout()
-        color2_container, self._color2_widgets = create_rgb_picker_widget(
-            "Gradient Color 2", (0, 0, 0))
-        for spin in self._color2_widgets[:3]:
+        gradient_box = QtWidgets.QGroupBox("Gradient")
+        gradient_col = QtWidgets.QVBoxLayout(gradient_box)
+        gradient_pickers = QtWidgets.QHBoxLayout()
+        color1_container, self._color1_widgets = create_rgb_picker_widget("Color 1", (255, 255, 255))
+        color2_container, self._color2_widgets = create_rgb_picker_widget("Color 2", (0, 0, 0))
+        for spin in self._color1_widgets[:3] + self._color2_widgets[:3]:
             spin.valueChanged.connect(self._sync_gradient_color)
-        gradient_col.addWidget(color2_container)
+        gradient_pickers.addWidget(color1_container)
+        gradient_pickers.addWidget(color2_container)
+        gradient_col.addLayout(gradient_pickers)
         gradient_options = QtWidgets.QHBoxLayout()
         swap_button = QtWidgets.QPushButton("⇄ Swap")
         swap_button.setToolTip("Swap Color 1 and Color 2")
@@ -1085,7 +1112,7 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         self._gradient_scope_label.setStyleSheet("color: #444444; font-size: 11px;")
         gradient_col.addWidget(self._gradient_scope_label)
         gradient_col.addLayout(fill_options)
-        tools_row.addLayout(gradient_col)
+        tools_row.addWidget(gradient_box)
 
         tool_col = QtWidgets.QVBoxLayout()
         tool_col.addWidget(QtWidgets.QLabel("Tool:"))
@@ -1100,7 +1127,7 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         # Controls act on whichever grid is current, so they look self._grid up when used
         # (via lambdas) rather than binding to one grid at connect time.
         self._tool_group.buttonToggled.connect(
-            lambda button, checked: checked and self._grid.set_tool(button.property('tool')))
+            lambda button, checked: checked and self._on_tool_changed(button.property('tool')))
         self._flip_h_check = QtWidgets.QCheckBox("Flip arc ↔ (H)")
         self._flip_v_check = QtWidgets.QCheckBox("Flip arc ↕ (V)")
         self._flip_h_check.toggled.connect(lambda checked: self._grid.set_arc_flip_h(checked))
@@ -1147,7 +1174,8 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
             "Rows are blade pixels (top = tip, bottom = hilt), columns are animation stages "
             "(left = stage 1, played first). Left-click/drag to paint (Freehand), or click-"
             "drag-release to draw a straight line (Line), a curve (Arc) or a Color 1 → Color 2 "
-            "gradient (Gradient - fills the selected stages, or everything). Hold Shift with "
+            "gradient (Gradient - fills the selected stages, or everything; right-click picks "
+            "up Color 1, Shift+right-click Color 2). Hold Shift with "
             "Line or Gradient to snap to horizontal/vertical/45°; Shift-click with Freehand "
             "draws a line from the last painted cell. Right-click picks up a cell's color. "
             "With Select stages, drag across columns (Shift-click to extend) and use the stage "
@@ -1179,22 +1207,31 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         self._preview_button.clicked.connect(self._toggle_preview)
         preview_col.addWidget(self._preview_button)
         self._sequence_button = QtWidgets.QToolButton()
-        self._sequence_button.setText("Sequence")
         self._sequence_button.setPopupMode(QtWidgets.QToolButton.InstantPopup)
         self._sequence_button.setToolTip(
-            "The preview plays the states in the board's order: Pre-On → Power On → Idle "
-            "(lit) → Power Off → Post-Off → blade off. Add the optional ones here.")
-        sequence_menu = QtWidgets.QMenu(self._sequence_button)
+            "Which states the preview plays, in the board's order (Pre-On → Power On → Idle "
+            "→ Lockup → Power Off → Post-Off → Idle (off) → blade off). None ticked plays just "
+            "the animation being edited. Remembered for next time.")
+        sequence_menu = _StickyMenu(self._sequence_button)
         self._sequence_actions = {}
         present = {doc.state for doc in self._documents}
-        for state, label in SEQUENCE_OPTIONAL.items():
-            action = sequence_menu.addAction(label)
+        remembered = self._remembered_preview_states()
+        for state, _mode in SEQUENCE_ORDER[1:] + SEQUENCE_ORDER[:1]:   # Forever last
+            action = sequence_menu.addAction(SEQUENCE_LABELS[state])
             action.setCheckable(True)
             action.setEnabled(state in present)
-            action.toggled.connect(self._rebuild_sequence)
+            action.setChecked(state in present and state in remembered)
+            action.toggled.connect(self._on_preview_states_changed)
             self._sequence_actions[state] = action
+        sequence_menu.addSeparator()
+        sequence_menu.addAction("Tick all").triggered.connect(lambda: self._set_preview_states(True))
+        sequence_menu.addAction("Untick all (just the one being edited)").triggered.connect(
+            lambda: self._set_preview_states(False))
         self._sequence_button.setMenu(sequence_menu)
         self._sequence_button.setVisible(any(doc.state for doc in self._documents))
+        self._building_preview_menu = False
+        ticked = sum(a.isChecked() for a in self._sequence_actions.values())
+        self._sequence_button.setText(f"States ({ticked})" if ticked else "States (current)")
         preview_col.addWidget(self._sequence_button)
         self._preview_delay_spin = QtWidgets.QSpinBox()
         self._preview_delay_spin.setRange(5, 2000)
@@ -1410,10 +1447,10 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         segments = []
         if any(doc.state for doc in self._documents):
             if self._sequence_actions['forever'].isChecked() and self._document_for_state('forever'):
-                order = [('forever', 'loop')]
+                order = [('forever', 'loop')]   # on the board, Forever replaces everything
             else:
-                order = [(s, m) for s, m in SEQUENCE_ORDER if s != 'forever' and
-                         (s not in SEQUENCE_OPTIONAL or self._sequence_actions[s].isChecked())]
+                order = [(s, m) for s, m in SEQUENCE_ORDER
+                         if s != 'forever' and self._sequence_actions[s].isChecked()]
             for state, mode in order:
                 doc = self._document_for_state(state)
                 if doc is not None:
@@ -1490,23 +1527,76 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
 
     # ------------------------------------------------------------------ handlers
 
+    # ------------------------------------------------------------------ preview states
+
+    @staticmethod
+    def _remembered_preview_states():
+        try:
+            saved = QtCore.QSettings().value(_PREVIEW_STATES_KEY)
+        except Exception:
+            saved = None
+        if saved is None:
+            return set(SEQUENCE_DEFAULT)
+        if isinstance(saved, str):          # QSettings returns a 1-item list as a str
+            saved = [saved] if saved else []
+        return set(saved)
+
+    def _on_preview_states_changed(self, *_args):
+        ticked = [s for s, a in self._sequence_actions.items() if a.isChecked()]
+        count = len(ticked)
+        self._sequence_button.setText(f"States ({count})" if count else "States (current)")
+        if not self._building_preview_menu:
+            try:
+                # Only states this window offers - others keep their remembered choice.
+                remembered = self._remembered_preview_states()
+                for state, action in self._sequence_actions.items():
+                    if action.isEnabled():
+                        (remembered.add if action.isChecked() else remembered.discard)(state)
+                QtCore.QSettings().setValue(_PREVIEW_STATES_KEY, sorted(remembered))
+            except Exception:
+                pass
+            self._rebuild_sequence()
+
+    def _set_preview_states(self, checked: bool):
+        self._building_preview_menu = True
+        for action in self._sequence_actions.values():
+            if action.isEnabled():
+                action.setChecked(checked)
+        self._building_preview_menu = False
+        self._on_preview_states_changed()
+
+    # ------------------------------------------------------------------ colors
+
+    def _on_tool_changed(self, tool: str):
+        self._grid.set_tool(tool)
+        # The Gradient tool paints with Color 1 → Color 2 only.
+        self._paint_container.setEnabled(tool != 'gradient')
+
     def _sync_paint_color(self):
         if self._grid is not None:
             self._grid.set_paint_color(self._current_paint_color())
             self._grid.update()
 
+    @staticmethod
+    def _picker_color(widgets) -> QtGui.QColor:
+        r_spin, g_spin, b_spin, _swatch = widgets
+        return QtGui.QColor(r_spin.value(), g_spin.value(), b_spin.value())
+
+    @staticmethod
+    def _set_picker_color(widgets, color: QtGui.QColor):
+        for spin, value in zip(widgets[:3], (color.red(), color.green(), color.blue())):
+            spin.setValue(value)
+
     def _sync_gradient_color(self):
         if self._grid is not None:
-            r_spin, g_spin, b_spin, _swatch = self._color2_widgets
-            self._grid.set_gradient_color(QtGui.QColor(r_spin.value(), g_spin.value(), b_spin.value()))
+            self._grid.set_gradient_colors(self._picker_color(self._color1_widgets),
+                                           self._picker_color(self._color2_widgets))
 
     def _swap_colors(self):
-        first = [spin.value() for spin in self._color_widgets[:3]]
-        second = [spin.value() for spin in self._color2_widgets[:3]]
-        for spin, value in zip(self._color_widgets[:3], second):
-            spin.setValue(value)
-        for spin, value in zip(self._color2_widgets[:3], first):
-            spin.setValue(value)
+        first = self._picker_color(self._color1_widgets)
+        second = self._picker_color(self._color2_widgets)
+        self._set_picker_color(self._color1_widgets, second)
+        self._set_picker_color(self._color2_widgets, first)
 
     def keyPressEvent(self, event):
         # Shift changes how a Line/Gradient drag in progress snaps - redraw its preview.
@@ -1526,10 +1616,13 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         super().keyReleaseEvent(event)
 
     def _on_eyedrop(self, color: QtGui.QColor):
-        r_spin, g_spin, b_spin, _swatch = self._color_widgets
-        r_spin.setValue(color.red())
-        g_spin.setValue(color.green())
-        b_spin.setValue(color.blue())
+        """Right-click picks up a color into the Paint color - or, with the Gradient tool,
+        into Color 1 (Shift+right-click: Color 2)."""
+        if self._tool_group.checkedButton().property('tool') == 'gradient':
+            shift = QtWidgets.QApplication.keyboardModifiers() & QtCore.Qt.ShiftModifier
+            self._set_picker_color(self._color2_widgets if shift else self._color1_widgets, color)
+        else:
+            self._set_picker_color(self._color_widgets, color)
 
     def _on_hover(self, pixel_index: int, stage_index: int):
         if pixel_index < 0:

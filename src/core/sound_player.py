@@ -24,6 +24,21 @@ from PySide6 import QtCore, QtMultimedia
 LOOP_CHANNELS = ('hum', 'lockup')
 
 
+def route_to_default_output(target):
+    """Point a QSoundEffect or QAudioOutput at the system's *current* default output.
+    Both lock onto whatever the default was when they were created and don't follow later
+    changes - so after plugging in headphones, one-shot sounds and loops could end up on
+    different devices. Call this right before each play."""
+    device = QtMultimedia.QMediaDevices.defaultAudioOutput()
+    if device.isNull():
+        return
+    if isinstance(target, QtMultimedia.QSoundEffect):
+        if target.audioDevice() != device:
+            target.setAudioDevice(device)
+    elif target.device() != device:
+        target.setDevice(device)
+
+
 def find_sound_variants(font_path: Optional[Path], action: str) -> List[Path]:
     """Every '<action>.wav' / '<action><N>.wav' file for this action in a font folder."""
     if font_path is None or not Path(font_path).is_dir():
@@ -56,12 +71,23 @@ class SoundPlayer(QtCore.QObject):
             self._loop_players[channel] = player
             self._loop_outputs[channel] = output
 
+        # Move loops that are already playing (the hum) when the default device changes,
+        # e.g. headphones plugged in mid-preview, instead of waiting for the next restart.
+        self._media_devices = QtMultimedia.QMediaDevices(self)
+        self._media_devices.audioOutputsChanged.connect(self._follow_default_output)
+
+    def _follow_default_output(self):
+        route_to_default_output(self._effect)
+        for output in self._loop_outputs.values():
+            route_to_default_output(output)
+
     def play_one_shot(self, font_path: Optional[Path], action: str) -> bool:
         """Play a random variant of this action's sound once. Returns False (no-op) if the
         font has no matching file."""
         sound_path = pick_sound(font_path, action)
         if sound_path is None:
             return False
+        route_to_default_output(self._effect)
         self._effect.setSource(QtCore.QUrl.fromLocalFile(str(sound_path)))
         self._effect.play()
         return True
@@ -74,6 +100,7 @@ class SoundPlayer(QtCore.QObject):
         if sound_path is None:
             player.stop()
             return False
+        route_to_default_output(self._loop_outputs[channel])
         player.setSource(QtCore.QUrl.fromLocalFile(str(sound_path)))
         player.play()
         return True
