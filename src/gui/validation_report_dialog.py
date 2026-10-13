@@ -33,6 +33,7 @@ class ValidationReportDialog(QtWidgets.QDialog):
             + sum(len(f.get('missing_keys', {})) for f in report['font_reports'])
             + len(report['orphaned_profiles'])
             + len(report['orphaned_colors'])
+            + len(report.get('grafx_warnings', []))
         )
         self.font_count = report.get('font_count', 0)
 
@@ -63,6 +64,25 @@ class ValidationReportDialog(QtWidgets.QDialog):
 
         for font_report in report['font_reports']:
             self._add_font_row(font_report)
+
+        grafx_warnings = report.get('grafx_warnings', [])
+        if grafx_warnings:
+            group = QtWidgets.QTreeWidgetItem(
+                self.tree, [f"GraFx timing warnings ({len(grafx_warnings)}) - animations vs. "
+                            f"refreshfx and sound length"])
+            group.setExpanded(True)
+            by_font = {}
+            for warning in grafx_warnings:
+                by_font.setdefault(str(warning['font_path']), []).append(warning)
+            for font_path, warnings in by_font.items():
+                first = warnings[0]
+                font_item = QtWidgets.QTreeWidgetItem(
+                    group, [f"{first['font_num']}-{first['font_name']} ({len(warnings)})"])
+                font_item.setData(0, QtCore.Qt.UserRole, font_path)
+                for warning in warnings:
+                    item = QtWidgets.QTreeWidgetItem(
+                        font_item, [f"{warning['resource']}/{warning['file']}: {warning['message']}"])
+                    item.setToolTip(0, warning['message'])
 
         if report['orphaned_profiles']:
             group = QtWidgets.QTreeWidgetItem(

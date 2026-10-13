@@ -12,13 +12,16 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtWidgets
 
-from core import grafx_writer
+from core import grafx_reader, grafx_timing, grafx_writer
 from core.file_handler import CFXFileHandler
 from gui.widgets.blade_preview import BladePreviewWidget
 from gui.widgets.widget_factory import create_rgb_picker_widget
 from gui.widgets import grafx_stage_editor
-from gui.widgets.grafx_stage_editor import GrafxStageEditor
+from gui.widgets.grafx_stage_editor import (
+    GrafxPixelEditorWindow, GrafxStageEditor, PainterDocument,
+)
 from gui.widgets.grafx_parameter_panel import GrafxSectionEditor
+from gui.widgets.sound_match_panel import SYNCABLE_STATES, SoundMatchPanel
 
 DEFAULT_PIXEL_COUNT = 125  # fallback used when config.txt has no usable 'ledstrip' value
 
@@ -79,12 +82,18 @@ class GrafxCreatorDialog(QtWidgets.QDialog):
         self.preview_label.setStyleSheet("font-weight: bold;")
         self.preview_button = QtWidgets.QPushButton("Update Preview")
         self.preview_button.clicked.connect(self._on_preview_clicked)
+        self.painter_button = QtWidgets.QPushButton("Open Painter…")
+        self.painter_button.setToolTip(
+            "Hand-paint any of this resource's animations, switching between them in the "
+            "painter. Painting a preset-based one switches it to Custom.")
+        self.painter_button.clicked.connect(lambda: self._open_painter(self._current_state()))
 
         preview_panel = QtWidgets.QWidget()
         preview_layout = QtWidgets.QVBoxLayout(preview_panel)
         preview_layout.addWidget(self.preview_label)
         preview_layout.addWidget(self.preview, alignment=QtCore.Qt.AlignHCenter)
         preview_layout.addWidget(self.preview_button)
+        preview_layout.addWidget(self.painter_button)
         preview_layout.addStretch()
 
         content_layout = QtWidgets.QHBoxLayout()
@@ -246,10 +255,12 @@ class GrafxCreatorDialog(QtWidgets.QDialog):
 
     def _build_state_page(self, state):
         label, _, _ = STATE_INFO[state]
+        states = self._selected_states()
+        position = f"state {states.index(state) + 1} of {len(states)}"
         page = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(page)
 
-        title = QtWidgets.QLabel(label)
+        title = QtWidgets.QLabel(f"{label}  ({position})")
         title.setStyleSheet("font-weight: bold; font-size: 14px;")
         layout.addWidget(title)
 
@@ -342,7 +353,10 @@ class GrafxCreatorDialog(QtWidgets.QDialog):
         # Custom: hand-paint each stage directly, rather than generating from parameters.
         # Owns its own stage count (via Add/Delete Stage) - the "Number of stages" and
         # "Random variants" controls below are disabled while this preset is selected.
-        widgets['stage_editor'] = GrafxStageEditor(self.pixel_count_spin.value(), initial_stage_count=10)
+        widgets['stage_editor'] = GrafxStageEditor(
+            self.pixel_count_spin.value(), initial_stage_count=10,
+            subject=f"{label} ({position}) - {grafx_reader.GRAFX_STATES[state][1]}1.bmp")
+        widgets['stage_editor'].set_open_handler(lambda: self._open_painter(state))
         preset_stack.addWidget(widgets['stage_editor'])
 
         preset_combo.currentIndexChanged.connect(preset_stack.setCurrentIndex)
@@ -397,13 +411,43 @@ class GrafxCreatorDialog(QtWidgets.QDialog):
                 widgets['stage_editor'].set_stage_count(value)
         widgets['stage_count_spin'].valueChanged.connect(on_stage_count_spin_changed)
 
+        # One-shot states: size the animation to a font's sounds / qon / qoff, and warn
+        # when refreshfx means not every stage can play.
+        if (state in SYNCABLE_STATES and self.main_window is not None
+                and getattr(self.main_window, 'file_handler', None) is not None):
+            panel = SoundMatchPanel(state, self.main_window)
+            widgets['sound_panel'] = panel
+
+            def refresh_sound_status(*_args):
+                panel.set_animation(widgets['stage_count_spin'].value(),
+                                    None if widgets['sync_check'].isChecked()
+                                    else widgets['delay_spin'].value())
+            for signal in (widgets['stage_count_spin'].valueChanged,
+                           widgets['sync_check'].toggled, widgets['delay_spin'].valueChanged):
+                signal.connect(refresh_sound_status)
+
+            def apply_sound_match(stage_count, delay_ms):
+                widgets['sync_check'].setChecked(delay_ms is None)
+                if delay_ms is not None:
+                    widgets['delay_spin'].setValue(delay_ms)
+                if PRESETS[preset_combo.currentIndex()] == 'Custom':
+                    # Stretch/squash what's been painted rather than cropping it.
+                    editor = widgets['stage_editor']
+                    editor.set_image(grafx_timing.resample_stages(editor.to_image(), stage_count))
+                else:
+                    widgets['stage_count_spin'].setValue(stage_count)
+                refresh_sound_status()
+            panel.apply_requested.connect(apply_sound_match)
+            refresh_sound_status()
+            layout.addWidget(panel)
+
         def on_preset_changed(index):
             is_custom = PRESETS[index] == 'Custom'
             widgets['many_spin'].setEnabled(not is_custom)
             if is_custom:
-                # The painter caps stage count at GrafxStageEditor.MAX_STAGE_COUNT (unlike
-                # the generated presets, which allow up to 400) - narrow the spinbox's range
-                # to match so it can't be set to a value the painter would silently clamp.
+                # The painter's cap (MAX_STAGE_COUNT) differs from the generated presets'
+                # 400 - match the spinbox's range to it so it can't be set to a value the
+                # painter would silently clamp.
                 widgets['stage_count_spin'].setRange(1, grafx_stage_editor.MAX_STAGE_COUNT)
                 widgets['stage_count_spin'].setValue(widgets['stage_editor'].stage_count())
                 widgets['many_spin'].setValue(1)
@@ -527,6 +571,7 @@ class GrafxCreatorDialog(QtWidgets.QDialog):
         self.preview_label.setVisible(state is not None)
         self.preview.setVisible(state is not None)
         self.preview_button.setVisible(state is not None)
+        self.painter_button.setVisible(state is not None)
         if state is not None:
             self.preview_label.setText(f"Preview: {STATE_INFO[state][0]}")
 
@@ -589,6 +634,52 @@ class GrafxCreatorDialog(QtWidgets.QDialog):
         if preset == 'Custom':
             return widgets['stage_editor'].to_image()
         raise ValueError(f"Unknown preset: {preset}")
+
+    def _open_painter(self, start_state):
+        """Open the painter on every selected state at once (so they can be switched
+        between, and the preview plays them as a sequence). Custom states start from their
+        painted grid; preset states from their generated animation - and any of those that
+        gets painted is switched to Custom with the result."""
+        states = self._selected_states()
+        if not states:
+            return
+        documents = []
+        for i, state in enumerate(states):
+            widgets = self.state_widgets[state]
+            preset = widgets['preset_combo'].currentText()
+            label = f"{STATE_INFO[state][0]} (state {i + 1} of {len(states)})"
+            if preset == 'Custom':
+                note = None
+            else:
+                note = (f"Generated by the {preset} preset - painting it switches this state "
+                        f"to Custom when you click Done (one variant).")
+            image = self._generate_image(state, seed=1)
+            delay_ms = None if widgets['sync_check'].isChecked() else widgets['delay_spin'].value()
+            documents.append(PainterDocument(state, label, image, state=state,
+                                             delay_ms=delay_ms, note=note))
+        dialog = GrafxPixelEditorWindow(parent=self, documents=documents,
+                                        current_key=start_state or states[0],
+                                        timing=self._painter_timing(start_state))
+        if dialog.exec() != QtWidgets.QDialog.Accepted:
+            return
+        for doc in dialog.modified_documents():
+            widgets = self.state_widgets[doc.key]
+            widgets['stage_editor'].set_image(doc.to_bmp_image())
+            if widgets['preset_combo'].currentText() != 'Custom':
+                widgets['preset_combo'].setCurrentText('Custom')
+
+    def _painter_timing(self, start_state):
+        """Font timing for the painter's sound preview: the font picked in this state's
+        Match-to-sound panel (or any state's), else the main window's selected font."""
+        states = [start_state] + self._selected_states()
+        for state in states:
+            panel = self.state_widgets.get(state, {}).get('sound_panel')
+            if panel is not None and panel.timing() is not None:
+                return panel.timing()
+        current = getattr(self.main_window, 'current_font_path', None)
+        if current is not None and hasattr(self.main_window, 'font_timing'):
+            return self.main_window.font_timing(current)
+        return None
 
     def _build_state_spec(self, state):
         widgets = self.state_widgets[state]

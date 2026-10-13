@@ -2,10 +2,10 @@
 """A freeform pixel-grid painter for GraFx animations. Used two ways:
 
 - by the GraFx Creator wizard's 'Custom' preset (via the compact GrafxStageEditor launcher),
-  to hand-paint a new animation of up to MAX_STAGE_COUNT stages;
+  to hand-paint a new animation;
 - by the GraFx resource editor (gui/grafx_resource_editor_dialog.py), to open one existing
-  BMP from a resource folder at its own size - real resources run to hundreds of stages,
-  so that path passes a much larger max_stages.
+  BMP from a resource folder at its own size.
+Both allow up to MAX_STAGE_COUNT stages - real resources run to hundreds.
 
 The actual painting happens in a separate, screen-sized GrafxPixelEditorWindow, with zoom
 controls and scrolling for animations too long to fit on screen.
@@ -20,14 +20,16 @@ core/grafx_reader.py). The colors()/set_colors() list-of-QColor API
 ([pixel_index][stage_index], pixel_index 0 = hilt-end pixel) is kept for the wizard.
 """
 import math
+import random
 
-from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtMultimedia, QtWidgets
 
 from core import grafx_writer
 from gui.widgets.widget_factory import create_rgb_picker_widget
 
-MAX_STAGE_COUNT = 50      # wizard 'Custom' preset limit
-MAX_RESOURCE_STAGES = 2000  # resource editor limit - stock files go up to ~500
+MAX_STAGE_COUNT = 2000    # painter limit (wizard 'Custom' and resource editor) - stock
+                          # files go up to ~500
+MAX_RESOURCE_STAGES = MAX_STAGE_COUNT
 DEFAULT_CELL_WIDTH = 14   # px per stage column, before GrafxPixelEditorWindow fits it to screen
 DEFAULT_CELL_HEIGHT = 5   # px per pixel row, same
 MIN_FIT_CELL_WIDTH = 3    # initial auto-fit never goes narrower than this; "Fit" can
@@ -301,6 +303,9 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
 
     def can_undo(self) -> bool:
         return bool(self._undo_stack)
+
+    def can_redo(self) -> bool:
+        return bool(self._redo_stack)
 
     def _restore(self, snapshot):
         old_count = self.stage_count()
@@ -692,9 +697,15 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
         if self._selection is not None:
             first, last = self._selection
             rect = QtCore.QRectF(first * cw, 0, (last - first + 1) * cw, self.height())
-            painter.fillRect(rect, QtGui.QColor(80, 160, 255, 70))
             pen = QtGui.QPen(QtGui.QColor(80, 160, 255))
-            pen.setWidth(2)
+            if self._tool in ('select', 'gradient'):
+                # The tools the selection actually limits - show it in full.
+                painter.fillRect(rect, QtGui.QColor(80, 160, 255, 70))
+                pen.setWidth(2)
+            else:
+                # Freehand/Line/Arc paint anywhere - just a faint reminder it's still there
+                # for the stage buttons.
+                pen.setStyle(QtCore.Qt.DashLine)
             painter.setPen(pen)
             painter.drawRect(rect.adjusted(1, 1, -1, -1))
 
@@ -781,37 +792,252 @@ class GrafxStripPreview(QtWidgets.QWidget):
         painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
 
 
+class PainterDocument:
+    """One animation the painter can edit - a wizard state, or one BMP of a resource.
+    Its grid (with its own undo history, selection and stage count) is created the first
+    time it's shown and then kept, so switching away and back preserves everything."""
+
+    def __init__(self, key, label: str, bmp_image: QtGui.QImage, state: str = None,
+                 delay_ms: int = None, note: str = None, warning: str = None):
+        self.key = key
+        self.label = label
+        self.state = state            # grafx_reader.GRAFX_STATES key, for the sequence preview
+        self.delay_ms = delay_ms      # None = synced to sound (preview uses its sync speed)
+        self.note = note
+        self.warning = warning
+        self._original = bmp_to_display(bmp_image)
+        self.grid = None
+
+    def display_image(self) -> QtGui.QImage:
+        return self.grid.display_image() if self.grid is not None else self._original
+
+    def is_modified(self) -> bool:
+        """Edited and actually different from what it started as (undoing back to the
+        original doesn't count)."""
+        return (self.grid is not None and self.grid.is_modified()
+                and self.grid.display_image() != self._original)
+
+    def to_bmp_image(self) -> QtGui.QImage:
+        return display_to_bmp(self.display_image())
+
+
+# The order the board plays states through one blade cycle: (state, mode). 'once' plays the
+# BMP through a single time; 'loop' repeats it for SEQUENCE_LOOP_MS (at least one pass).
+SEQUENCE_ORDER = [('forever', 'loop'), ('preon', 'once'), ('poweron', 'once'),
+                  ('leds', 'loop'), ('lockup', 'loop'), ('poweroff', 'once'),
+                  ('postoff', 'once'), ('idle', 'loop')]
+SEQUENCE_OPTIONAL = {'lockup': "Lockup", 'idle': "Idle (blade off)",
+                     'forever': "Forever (replaces everything else)"}
+SEQUENCE_LOOP_MS = 2500
+SEQUENCE_OFF_MS = 700
+
+
+class GrafxSequencePreview(QtWidgets.QWidget):
+    """Plays a list of segments back to back on a blade strip (hilt at the bottom), the way
+    the board steps through states: each segment is {'label', 'source' (callable returning
+    a display-layout image, read on every tick so unsaved edits show), 'delay_ms' (None =
+    the sync speed), 'mode' ('once' | 'loop' | 'off')}, optionally with 'sounds'
+    ([(path, ms)] - one is played when the segment starts) and 'delay_fn' (callable(sound_ms)
+    -> ms per stage, for states synced to their sound)."""
+
+    status_changed = QtCore.Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._segments = []
+        self._index = 0
+        self._stage = 0
+        self._elapsed = 0
+        self._sync_delay = DEFAULT_PREVIEW_DELAY_MS
+        self._segment_delay = None    # ms per stage for the current segment, set at its start
+        self._sound_enabled = True
+        self._sound = QtMultimedia.QSoundEffect(self)
+        self._timer = QtCore.QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        self.setMinimumSize(24, 160)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
+        self.setFixedWidth(36)
+
+    def set_segments(self, segments):
+        self._segments = list(segments)
+        self._index = self._stage = self._elapsed = 0
+        self._start_segment(play_sound=self.is_playing())
+        self._emit_status()
+        self.update()
+
+    def set_sync_delay(self, delay_ms: int):
+        self._sync_delay = max(5, int(delay_ms))
+        self._start_segment(play_sound=False)
+
+    def set_sound_enabled(self, enabled: bool):
+        self._sound_enabled = enabled
+        if not enabled:
+            self._sound.stop()
+
+    def play(self):
+        if self._segments:
+            self._timer.start()
+            self._start_segment(play_sound=True, restart=False)
+
+    def stop(self):
+        self._timer.stop()
+        self._sound.stop()
+
+    def _start_segment(self, play_sound: bool = True, restart: bool = True):
+        """Work out the current segment's speed and, if it has sounds, start one - a synced
+        segment's speed depends on which sound (of several lengths) was picked."""
+        segment = self._segment()
+        sound_ms = None
+        if segment is not None and segment.get('sounds') and play_sound and self._sound_enabled \
+                and (restart or self._stage == 0):
+            path, sound_ms = random.choice(segment['sounds'])
+            self._sound.stop()
+            self._sound.setSource(QtCore.QUrl.fromLocalFile(str(path)))
+            self._sound.play()
+        if segment is not None and segment.get('delay_fn') is not None:
+            self._segment_delay = segment['delay_fn'](sound_ms)
+        else:
+            self._segment_delay = None
+        self._apply_interval()
+
+    def is_playing(self) -> bool:
+        return self._timer.isActive()
+
+    def _segment(self):
+        return self._segments[self._index] if self._segments else None
+
+    def _delay(self, segment) -> int:
+        if segment is None or segment['mode'] == 'off':
+            return 50
+        if segment is self._segment() and self._segment_delay:
+            return max(5, round(self._segment_delay))
+        return max(5, segment.get('delay_ms') or self._sync_delay)
+
+    def _apply_interval(self):
+        self._timer.setInterval(self._delay(self._segment()))
+
+    def _image(self, segment):
+        if segment is None or segment['mode'] == 'off':
+            return None
+        image = segment['source']()
+        return image if image is not None and not image.isNull() else None
+
+    def _tick(self):
+        segment = self._segment()
+        if segment is None:
+            return
+        delay = self._delay(segment)
+        self._elapsed += delay
+        if segment['mode'] == 'off':
+            if self._elapsed >= SEQUENCE_OFF_MS:
+                self._advance()
+        else:
+            image = self._image(segment)
+            count = image.width() if image is not None else 1
+            self._stage += 1
+            if segment['mode'] == 'once':
+                if self._stage >= count:
+                    self._advance()
+            else:
+                if self._stage >= count:
+                    self._stage = 0
+                if len(self._segments) > 1 and self._elapsed >= max(SEQUENCE_LOOP_MS, count * delay):
+                    self._advance()
+        self._emit_status()
+        self.update()
+
+    def _advance(self):
+        self._index = (self._index + 1) % len(self._segments)
+        self._stage = self._elapsed = 0
+        self._start_segment()
+
+    def _emit_status(self):
+        segment = self._segment()
+        if segment is None:
+            self.status_changed.emit("")
+            return
+        image = self._image(segment)
+        if image is None:
+            self.status_changed.emit(segment['label'])
+        else:
+            self.status_changed.emit(
+                f"{segment['label']}\n{min(self._stage, image.width() - 1) + 1}/{image.width()}")
+
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        painter.fillRect(self.rect(), QtGui.QColor(20, 20, 20))
+        image = self._image(self._segment())
+        if image is not None:
+            stage = min(self._stage, image.width() - 1)
+            painter.drawImage(self.rect().adjusted(4, 4, -4, -4), image,
+                              QtCore.QRect(stage, 0, 1, image.height()))
+        painter.setPen(QtGui.QColor(90, 90, 90))
+        painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
+
+
 class GrafxPixelEditorWindow(QtWidgets.QDialog):
     """The actual painting surface, opened full-size (sized to the screen). Edits are local
     until one of the accept buttons is clicked; Cancel discards them (asking first if
     anything was changed).
 
-    The wizard opens it with a colors grid and the default "Done" button. The resource
-    editor passes bmp_image (an existing file, opened at its own size), a larger
-    max_stages, its own accept_buttons ([(label, action_key), ...] - the clicked key ends up
-    in self.chosen_action), and optionally a warning to show above the grid."""
+    Normally opened on a list of PainterDocuments (every state of a wizard resource, or
+    every BMP of an existing resource), switched with the "Editing:" dropdown - each keeps
+    its own edits and undo history - while the preview plays them through as a saber
+    sequence. The older single-animation form (width/stage_count plus colors or bmp_image)
+    still works and becomes a one-document window. accept_buttons is [(label, action_key)];
+    the clicked key ends up in self.chosen_action."""
 
-    def __init__(self, width: int, stage_count: int, colors=None, parent=None, *,
+    def __init__(self, width: int = 0, stage_count: int = 0, colors=None, parent=None, *,
                  bmp_image: QtGui.QImage = None, max_stages: int = MAX_STAGE_COUNT,
                  title: str = "Paint GraFx Stages", accept_buttons=None,
-                 warning: str = None, preview_delay_ms: int = None):
+                 warning: str = None, preview_delay_ms: int = None, subject: str = None,
+                 documents=None, current_key=None, timing=None):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self._width = width
         self.chosen_action = None
-        if bmp_image is not None:
-            stage_count = bmp_image.height()
-            max_stages = max(max_stages, stage_count)
+        if documents is None:
+            if bmp_image is None:
+                grid = GrafxPixelGridWidget(width, stage_count, max_stages=max_stages)
+                if colors is not None:
+                    grid.set_colors(colors)
+                bmp_image = grid.to_bmp_image()
+                grid.deleteLater()
+            documents = [PainterDocument('main', subject or "Animation", bmp_image,
+                                         delay_ms=preview_delay_ms, warning=warning)]
+        self._documents = list(documents)
+        self._timing = timing   # core.grafx_timing.FontTiming: sounds + refreshfx, or None
+        self._max_stages = max([max_stages] + [d.display_image().width() for d in self._documents])
+        self._doc = None
+        self._grid = None
 
         layout = QtWidgets.QVBoxLayout(self)
 
-        if warning:
-            warning_label = QtWidgets.QLabel("⚠ " + warning)
-            warning_label.setWordWrap(True)
-            warning_label.setStyleSheet(
-                "color: #8a4b00; background-color: #fff3cd; border: 1px solid #e0c060; "
-                "padding: 4px;")
-            layout.addWidget(warning_label)
+        # Which animation is on the grid - the full-size painter covers whatever opened it.
+        header_row = QtWidgets.QHBoxLayout()
+        editing_label = QtWidgets.QLabel("Editing:")
+        editing_label.setStyleSheet("font-weight: bold; font-size: 16px;")
+        self._doc_combo = QtWidgets.QComboBox()
+        self._doc_combo.setStyleSheet("font-weight: bold; font-size: 16px;")
+        self._doc_combo.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToContents)
+        for doc in self._documents:
+            self._doc_combo.addItem(doc.label, doc.key)
+        self._doc_combo.setToolTip("Switch animation - edits to each are kept until you "
+                                   "save or cancel. • marks changed ones.")
+        self._doc_combo.currentIndexChanged.connect(self._switch_to)
+        header_row.addWidget(editing_label)
+        header_row.addWidget(self._doc_combo)
+        self._doc_note_label = QtWidgets.QLabel()
+        self._doc_note_label.setWordWrap(True)
+        self._doc_note_label.setStyleSheet("color: #555555; font-style: italic; font-size: 11px;")
+        header_row.addWidget(self._doc_note_label, stretch=1)
+        layout.addLayout(header_row)
+
+        self._warning_label = QtWidgets.QLabel()
+        self._warning_label.setWordWrap(True)
+        self._warning_label.setStyleSheet(
+            "color: #8a4b00; background-color: #fff3cd; border: 1px solid #e0c060; "
+            "padding: 4px;")
+        layout.addWidget(self._warning_label)
 
         tools_row = QtWidgets.QHBoxLayout()
 
@@ -855,6 +1081,9 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         fill_blade_button.clicked.connect(lambda: self._range_op(lambda: self._grid.fill_gradient('blade')))
         fill_options.addWidget(fill_time_button)
         fill_options.addWidget(fill_blade_button)
+        self._gradient_scope_label = QtWidgets.QLabel()
+        self._gradient_scope_label.setStyleSheet("color: #444444; font-size: 11px;")
+        gradient_col.addWidget(self._gradient_scope_label)
         gradient_col.addLayout(fill_options)
         tools_row.addLayout(gradient_col)
 
@@ -868,8 +1097,8 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
             radio.setChecked(key == 'freehand')
             self._tool_group.addButton(radio)
             tool_col.addWidget(radio)
-        # self._grid doesn't exist yet at this point in __init__ - deferred via lambdas so
-        # it's only looked up once a control is actually used, not at connect-time.
+        # Controls act on whichever grid is current, so they look self._grid up when used
+        # (via lambdas) rather than binding to one grid at connect time.
         self._tool_group.buttonToggled.connect(
             lambda button, checked: checked and self._grid.set_tool(button.property('tool')))
         self._flip_h_check = QtWidgets.QCheckBox("Flip arc ↔ (H)")
@@ -887,11 +1116,10 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         settings_col.addRow("Brush size:", self._brush_spin)
 
         self._stage_count_spin = QtWidgets.QSpinBox()
-        self._stage_count_spin.setRange(1, max_stages)
-        self._stage_count_spin.setValue(max(1, min(max_stages, stage_count)))
+        self._stage_count_spin.setRange(1, self._max_stages)
         self._stage_count_spin.setKeyboardTracking(False)
         self._stage_count_spin.valueChanged.connect(self._on_stage_count_changed)
-        settings_col.addRow(f"Stages (max {max_stages}):", self._stage_count_spin)
+        settings_col.addRow(f"Stages (max {self._max_stages}):", self._stage_count_spin)
 
         zoom_row = QtWidgets.QHBoxLayout()
         self._zoom_w_spin = QtWidgets.QSpinBox()
@@ -923,51 +1151,68 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
             "Line or Gradient to snap to horizontal/vertical/45°; Shift-click with Freehand "
             "draws a line from the last painted cell. Right-click picks up a cell's color. "
             "With Select stages, drag across columns (Shift-click to extend) and use the stage "
-            "buttons below. Ctrl+Z / Ctrl+Shift+Z undo and redo. With the Arc tool, press H "
-            "or V (or the checkboxes) to flip which way the curve bows."
+            "buttons below; Esc or Select None clears the selection. Ctrl+Z / Ctrl+Shift+Z "
+            "undo and redo. With the Arc tool, press H or V (or the checkboxes) to flip which "
+            "way the curve bows."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #666666; font-style: italic; font-size: 11px;")
         layout.addWidget(hint)
 
-        self._grid = GrafxPixelGridWidget(self._width, self._stage_count_spin.value(),
-                                          max_stages=max_stages)
-        if bmp_image is not None:
-            self._grid.set_bmp_image(bmp_image)
-        elif colors is not None:
-            self._grid.set_colors(colors)
-        self._grid.eyedropped.connect(self._on_eyedrop)
-        self._grid.stage_count_changed.connect(self._on_grid_stage_count_changed)
-        self._grid.selection_changed.connect(self._update_range_controls)
-        self._grid.hovered.connect(self._on_hover)
-
         self._scroll = QtWidgets.QScrollArea()
-        self._scroll.setWidget(self._grid)
         self._scroll.setWidgetResizable(False)
 
         preview_col = QtWidgets.QVBoxLayout()
         preview_title = QtWidgets.QLabel("Preview")
         preview_title.setStyleSheet("font-weight: bold;")
         preview_col.addWidget(preview_title, alignment=QtCore.Qt.AlignHCenter)
-        self._preview = GrafxStripPreview(self._grid.display_image)
-        self._preview.set_delay_ms(preview_delay_ms or DEFAULT_PREVIEW_DELAY_MS)
+        self._preview = GrafxSequencePreview()
         preview_col.addWidget(self._preview, stretch=1, alignment=QtCore.Qt.AlignHCenter)
-        self._preview_stage_label = QtWidgets.QLabel("")
-        self._preview_stage_label.setStyleSheet("font-size: 10px; color: #666666;")
-        self._preview.stage_changed.connect(
-            lambda stage, count: self._preview_stage_label.setText(f"{stage + 1}/{count}"))
-        preview_col.addWidget(self._preview_stage_label, alignment=QtCore.Qt.AlignHCenter)
+        self._preview_status = QtWidgets.QLabel("")
+        self._preview_status.setAlignment(QtCore.Qt.AlignHCenter)
+        self._preview_status.setWordWrap(True)
+        self._preview_status.setFixedWidth(96)
+        self._preview_status.setStyleSheet("font-size: 10px; color: #444444;")
+        self._preview.status_changed.connect(self._preview_status.setText)
+        preview_col.addWidget(self._preview_status, alignment=QtCore.Qt.AlignHCenter)
         self._preview_button = QtWidgets.QPushButton("Play")
         self._preview_button.clicked.connect(self._toggle_preview)
         preview_col.addWidget(self._preview_button)
+        self._sequence_button = QtWidgets.QToolButton()
+        self._sequence_button.setText("Sequence")
+        self._sequence_button.setPopupMode(QtWidgets.QToolButton.InstantPopup)
+        self._sequence_button.setToolTip(
+            "The preview plays the states in the board's order: Pre-On → Power On → Idle "
+            "(lit) → Power Off → Post-Off → blade off. Add the optional ones here.")
+        sequence_menu = QtWidgets.QMenu(self._sequence_button)
+        self._sequence_actions = {}
+        present = {doc.state for doc in self._documents}
+        for state, label in SEQUENCE_OPTIONAL.items():
+            action = sequence_menu.addAction(label)
+            action.setCheckable(True)
+            action.setEnabled(state in present)
+            action.toggled.connect(self._rebuild_sequence)
+            self._sequence_actions[state] = action
+        self._sequence_button.setMenu(sequence_menu)
+        self._sequence_button.setVisible(any(doc.state for doc in self._documents))
+        preview_col.addWidget(self._sequence_button)
         self._preview_delay_spin = QtWidgets.QSpinBox()
         self._preview_delay_spin.setRange(5, 2000)
         self._preview_delay_spin.setSuffix(" ms")
-        self._preview_delay_spin.setToolTip("Preview speed only (ms per stage) - doesn't "
-                                            "change the file's delay setting")
-        self._preview_delay_spin.setValue(preview_delay_ms or DEFAULT_PREVIEW_DELAY_MS)
-        self._preview_delay_spin.valueChanged.connect(self._preview.set_delay_ms)
+        self._preview_delay_spin.setToolTip(
+            "Preview speed (ms per stage) for animations with no delay= - on the board "
+            "those are synced to the sound's length. Doesn't change any file.")
+        self._preview_delay_spin.setValue(DEFAULT_PREVIEW_DELAY_MS)
+        self._preview_delay_spin.valueChanged.connect(self._preview.set_sync_delay)
         preview_col.addWidget(self._preview_delay_spin)
+        self._sound_check = QtWidgets.QCheckBox("Sound")
+        self._sound_check.setChecked(timing is not None)
+        self._sound_check.setVisible(timing is not None)
+        self._sound_check.setToolTip(
+            f"Play {timing.label}'s sounds with Pre-On/Power On/Power Off/Post-Off, timed the "
+            f"way the board would play them" if timing is not None else "")
+        self._sound_check.toggled.connect(self._preview.set_sound_enabled)
+        preview_col.addWidget(self._sound_check)
 
         grid_row = QtWidgets.QHBoxLayout()
         grid_row.addWidget(self._scroll, stretch=1)
@@ -984,7 +1229,7 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         range_row.addWidget(self._selection_label)
         self._copy_button = QtWidgets.QPushButton("Copy")
         self._copy_button.setToolTip("Copy the selected stages (Ctrl+C) - they can be pasted "
-                                     "into another file too")
+                                     "into another animation too")
         self._copy_button.clicked.connect(self._copy)
         self._paste_button = QtWidgets.QPushButton("Paste")
         self._paste_button.setToolTip("Insert copied stages after the selection, or at the "
@@ -1008,28 +1253,27 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         self._reverse_button.setToolTip("Play the selected stages (or the whole animation, "
                                         "with nothing selected) backwards")
         self._reverse_button.clicked.connect(lambda: self._range_op(self._grid.reverse_selection))
-        for widget in (self._copy_button, self._paste_button, self._duplicate_button,
-                       self._insert_button, self._insert_count_spin, self._delete_button,
-                       self._reverse_button):
+        self._select_none_button = QtWidgets.QPushButton("Select None")
+        self._select_none_button.setToolTip("Clear the stage selection (Esc)")
+        self._select_none_button.clicked.connect(lambda: self._grid.set_selection(None))
+        for widget in (self._select_none_button, self._copy_button, self._paste_button,
+                       self._duplicate_button, self._insert_button, self._insert_count_spin,
+                       self._delete_button, self._reverse_button):
             range_row.addWidget(widget)
         range_row.addStretch()
         layout.addLayout(range_row)
 
         mgmt_row = QtWidgets.QHBoxLayout()
         self._undo_button = QtWidgets.QPushButton("Undo")
-        self._undo_button.setEnabled(False)
-        self._undo_button.clicked.connect(self._grid.undo)
-        self._grid.undo_available_changed.connect(self._undo_button.setEnabled)
+        self._undo_button.clicked.connect(lambda: self._grid.undo())
         self._redo_button = QtWidgets.QPushButton("Redo")
-        self._redo_button.setEnabled(False)
-        self._redo_button.clicked.connect(self._grid.redo)
-        self._grid.redo_available_changed.connect(self._redo_button.setEnabled)
+        self._redo_button.clicked.connect(lambda: self._grid.redo())
         mgmt_row.addWidget(self._undo_button)
         mgmt_row.addWidget(self._redo_button)
 
         for sequence, slot in (
-                (QtGui.QKeySequence.Undo, self._grid.undo),
-                (QtGui.QKeySequence.Redo, self._grid.redo),
+                (QtGui.QKeySequence.Undo, lambda: self._grid.undo()),
+                (QtGui.QKeySequence.Redo, lambda: self._grid.redo()),
                 (QtGui.QKeySequence.Copy, self._copy),
                 (QtGui.QKeySequence.Paste, lambda: self._range_op(self._grid.paste)),
                 (QtGui.QKeySequence("Ctrl+D"), lambda: self._range_op(self._grid.duplicate_selection)),
@@ -1068,11 +1312,138 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         layout.addLayout(nav_row)
 
         self._auto_fit = True
-        self._sync_paint_color()
-        self._sync_gradient_color()
-        self._update_range_controls()
+        start = next((i for i, d in enumerate(self._documents) if d.key == current_key), 0)
+        self._doc_combo.blockSignals(True)
+        self._doc_combo.setCurrentIndex(start)
+        self._doc_combo.blockSignals(False)
+        self._switch_to(start)
+        self._rebuild_sequence()
         self._resize_to_screen()
         self._fit_to_window()
+
+    # ------------------------------------------------------------------ documents
+
+    def _grid_for(self, doc: PainterDocument) -> GrafxPixelGridWidget:
+        if doc.grid is None:
+            image = doc.display_image()
+            grid = GrafxPixelGridWidget(image.height(), image.width(), max_stages=self._max_stages)
+            grid.set_bmp_image(display_to_bmp(image))
+            # Signals only matter while this grid is the one on screen.
+            current = lambda g=grid: g is self._grid
+            grid.eyedropped.connect(lambda c, g=grid: current(g) and self._on_eyedrop(c))
+            grid.stage_count_changed.connect(
+                lambda n, g=grid: current(g) and self._on_grid_stage_count_changed(n))
+            grid.selection_changed.connect(lambda g=grid: current(g) and self._update_range_controls())
+            grid.hovered.connect(lambda p, s, g=grid: current(g) and self._on_hover(p, s))
+            grid.undo_available_changed.connect(lambda _v, g=grid: current(g) and self._update_undo_buttons())
+            grid.redo_available_changed.connect(lambda _v, g=grid: current(g) and self._update_undo_buttons())
+            grid.cell_painted.connect(self._refresh_doc_labels)
+            grid.stage_count_changed.connect(self._refresh_doc_labels)
+            grid.stage_count_changed.connect(lambda _n, g=grid: current(g) and self._update_warning())
+            doc.grid = grid
+        return doc.grid
+
+    def _switch_to(self, index: int):
+        if not 0 <= index < len(self._documents):
+            return
+        if self._grid is not None:
+            self._scroll.takeWidget()
+            self._grid.setParent(self)     # keep the grid (and its undo history) alive
+            self._grid.hide()
+        self._doc = self._documents[index]
+        self._grid = self._grid_for(self._doc)
+        self._scroll.setWidget(self._grid)
+        self._grid.show()
+
+        # Carry the window-level tool settings over to this grid.
+        self._grid.set_paint_color(self._current_paint_color())
+        self._sync_gradient_color()
+        self._grid.set_gradient_spread(self._spread_combo.currentData())
+        self._grid.set_tool(self._tool_group.checkedButton().property('tool'))
+        self._grid.set_brush_size(self._brush_spin.value())
+        self._grid.set_arc_flip_h(self._flip_h_check.isChecked())
+        self._grid.set_arc_flip_v(self._flip_v_check.isChecked())
+
+        self._stage_count_spin.blockSignals(True)
+        self._stage_count_spin.setValue(self._grid.stage_count())
+        self._stage_count_spin.blockSignals(False)
+        self._doc_note_label.setText(self._doc.note or "")
+        self._update_warning()
+        self._filled = False
+        self._fill_button.setText("Fill All Stages")
+        if self._auto_fit:
+            self._fit_to_window()
+        else:
+            self._grid.set_cell_size(self._zoom_w_spin.value(), self._zoom_h_spin.value())
+        self._update_range_controls()
+        self._update_undo_buttons()
+        self._rebuild_sequence()
+
+    def _update_warning(self):
+        """The document's own warning (e.g. width mismatch) plus a live refreshfx/sound
+        timing check of the animation on screen."""
+        messages = [self._doc.warning] if self._doc.warning else []
+        if self._timing is not None and self._doc.state:
+            messages += self._timing.check(self._doc.state, self._grid.stage_count(),
+                                           self._doc.delay_ms)
+        self._warning_label.setText("\n".join("⚠ " + m for m in messages))
+        self._warning_label.setVisible(bool(messages))
+
+    def _refresh_doc_labels(self, *_args):
+        for index, doc in enumerate(self._documents):
+            text = ("• " if doc.is_modified() else "") + doc.label
+            if self._doc_combo.itemText(index) != text:
+                self._doc_combo.setItemText(index, text)
+
+    def _update_undo_buttons(self):
+        self._undo_button.setEnabled(self._grid.can_undo())
+        self._redo_button.setEnabled(self._grid.can_redo())
+
+    def _document_for_state(self, state):
+        """The animation the preview plays for a state: the one being edited if it's that
+        state, else the first one (variant 1 of a resource)."""
+        if self._doc is not None and self._doc.state == state:
+            return self._doc
+        return next((d for d in self._documents if d.state == state), None)
+
+    def _rebuild_sequence(self, *_args):
+        segments = []
+        if any(doc.state for doc in self._documents):
+            if self._sequence_actions['forever'].isChecked() and self._document_for_state('forever'):
+                order = [('forever', 'loop')]
+            else:
+                order = [(s, m) for s, m in SEQUENCE_ORDER if s != 'forever' and
+                         (s not in SEQUENCE_OPTIONAL or self._sequence_actions[s].isChecked())]
+            for state, mode in order:
+                doc = self._document_for_state(state)
+                if doc is not None:
+                    segment = {'label': doc.label, 'source': doc.display_image,
+                               'delay_ms': doc.delay_ms, 'mode': mode}
+                    if self._timing is not None and mode == 'once':
+                        segment['sounds'] = self._timing.sounds(state)
+                        segment['delay_fn'] = (
+                            lambda sound_ms, d=doc, st=state: self._timing.effective_delay_ms(
+                                st, d.display_image().width(), d.delay_ms, sound_ms))
+                    segments.append(segment)
+            if segments and order[0][0] != 'forever':
+                segments.append({'label': "(blade off)", 'source': None, 'delay_ms': None,
+                                 'mode': 'off'})
+        if not segments and self._doc is not None:
+            segments = [{'label': self._doc.label, 'source': self._doc.display_image,
+                         'delay_ms': self._doc.delay_ms, 'mode': 'loop'}]
+        playing = self._preview.is_playing()
+        self._preview.set_segments(segments)
+        if playing:
+            self._preview.play()
+
+    def documents(self):
+        return list(self._documents)
+
+    def modified_documents(self):
+        return [doc for doc in self._documents if doc.is_modified()]
+
+    def current_document(self) -> PainterDocument:
+        return self._doc
 
     # ------------------------------------------------------------------ sizing / zoom
 
@@ -1120,12 +1491,14 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
     # ------------------------------------------------------------------ handlers
 
     def _sync_paint_color(self):
-        self._grid.set_paint_color(self._current_paint_color())
-        self._grid.update()
+        if self._grid is not None:
+            self._grid.set_paint_color(self._current_paint_color())
+            self._grid.update()
 
     def _sync_gradient_color(self):
-        r_spin, g_spin, b_spin, _swatch = self._color2_widgets
-        self._grid.set_gradient_color(QtGui.QColor(r_spin.value(), g_spin.value(), b_spin.value()))
+        if self._grid is not None:
+            r_spin, g_spin, b_spin, _swatch = self._color2_widgets
+            self._grid.set_gradient_color(QtGui.QColor(r_spin.value(), g_spin.value(), b_spin.value()))
 
     def _swap_colors(self):
         first = [spin.value() for spin in self._color_widgets[:3]]
@@ -1139,6 +1512,12 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         # Shift changes how a Line/Gradient drag in progress snaps - redraw its preview.
         if event.key() == QtCore.Qt.Key_Shift:
             self._grid.update()
+        # Esc clears a stage selection first; only with nothing selected does it fall
+        # through to QDialog's close (which asks before discarding changes).
+        if event.key() == QtCore.Qt.Key_Escape and self._grid.selection() is not None:
+            self._grid.set_selection(None)
+            event.accept()
+            return
         super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event):
@@ -1184,16 +1563,22 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         if not operation():
             QtWidgets.QApplication.beep()
         self._update_range_controls()
+        self._refresh_doc_labels()
 
     def _update_range_controls(self):
         selection = self._grid.selection()
         if selection is None:
             self._selection_label.setText("No stages selected")
+            self._gradient_scope_label.setText(
+                f"Gradients fill: all {self._grid.stage_count()} stages")
         else:
             first, last = selection
             self._selection_label.setText(
                 f"Selected: stages {first + 1}–{last + 1} ({last - first + 1})")
+            self._gradient_scope_label.setText(
+                f"Gradients fill: selected stages {first + 1}–{last + 1} only")
         has_selection = selection is not None
+        self._select_none_button.setEnabled(has_selection)
         room = self._grid.max_stages() - self._grid.stage_count()
         clip = GrafxPixelGridWidget.clipboard_stage_count()
         self._copy_button.setEnabled(has_selection)
@@ -1229,26 +1614,29 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
             self._grid.fill_all(QtGui.QColor(0, 0, 0))
             self._fill_button.setText("Fill All Stages")
         self._filled = not self._filled
+        self._refresh_doc_labels()
 
     def _seed_from_preset(self):
         preset = self._seed_combo.currentText()
+        width = self._grid.pixel_count()
         stage_count = self._grid.stage_count()
         color = self._current_paint_color()
         rgb = (color.red(), color.green(), color.blue())
         if preset == 'Solid Fade':
-            image = grafx_writer.generate_solid_fade(self._width, stage_count, (0, 0, 0), rgb)
+            image = grafx_writer.generate_solid_fade(width, stage_count, (0, 0, 0), rgb)
         elif preset == 'Wipe':
-            image = grafx_writer.generate_wipe(self._width, stage_count, rgb, (0, 0, 0))
+            image = grafx_writer.generate_wipe(width, stage_count, rgb, (0, 0, 0))
         elif preset == 'Flicker':
-            image = grafx_writer.generate_flicker(self._width, stage_count, rgb, 60)
+            image = grafx_writer.generate_flicker(width, stage_count, rgb, 60)
         elif preset == 'Fire':
-            image = grafx_writer.generate_fire(self._width, stage_count, rgb)
+            image = grafx_writer.generate_fire(width, stage_count, rgb)
         else:
             return
         self._grid.push_undo_snapshot()
         self._grid.set_bmp_image(image)
         self._fill_button.setText("Fill All Stages")
         self._filled = False
+        self._refresh_doc_labels()
 
     def _accept_with(self, action: str):
         self.chosen_action = action
@@ -1256,10 +1644,12 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         self.accept()
 
     def reject(self):
-        if self._grid.is_modified():
+        changed = self.modified_documents()
+        if changed:
+            names = "\n".join(f"  • {doc.label}" for doc in changed)
             response = QtWidgets.QMessageBox.question(
                 self, "Discard Changes?",
-                "Discard the changes you've made to this animation?",
+                f"Discard the changes you've made to:\n\n{names}",
                 QtWidgets.QMessageBox.Discard | QtWidgets.QMessageBox.Cancel,
                 QtWidgets.QMessageBox.Cancel)
             if response != QtWidgets.QMessageBox.Discard:
@@ -1267,7 +1657,7 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         self._preview.stop()
         super().reject()
 
-    # ------------------------------------------------------------------ results
+    # ------------------------------------------------------------------ results (current)
 
     def colors(self):
         return self._grid.colors()
@@ -1280,16 +1670,20 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
 
 
 class GrafxStageEditor(QtWidgets.QWidget):
-    """Compact launcher embedded in the wizard page: owns the actual stage data and opens
-    GrafxPixelEditorWindow to paint it."""
+    """Compact launcher embedded in the wizard page: owns the actual stage data (as a
+    BMP-layout image, so long animations stay cheap) and opens GrafxPixelEditorWindow to
+    paint it."""
 
     stage_count_changed = QtCore.Signal(int)
 
-    def __init__(self, width: int, initial_stage_count: int = 10, parent=None):
+    def __init__(self, width: int, initial_stage_count: int = 10, parent=None,
+                 subject: str = None):
         super().__init__(parent)
         self._width = max(1, width)
-        self._stage_count = max(1, min(MAX_STAGE_COUNT, initial_stage_count))
-        self._colors = self._blank_grid()
+        self._subject = subject   # shown in the painter, e.g. "Power On (state 1 of 3)"
+        self._open_handler = None
+        stage_count = max(1, min(MAX_STAGE_COUNT, initial_stage_count))
+        self._image = display_to_bmp(_blank_image(stage_count, self._width))
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -1305,52 +1699,57 @@ class GrafxStageEditor(QtWidgets.QWidget):
 
         self._update_summary()
 
-    def _blank_grid(self):
-        return [[QtGui.QColor(0, 0, 0) for _ in range(self._stage_count)]
-                for _ in range(self._width)]
-
     def _update_summary(self):
         self._summary_label.setText(
-            f"{self._stage_count} stage(s), {self._width} pixels wide. "
+            f"{self.stage_count()} stage(s), {self._width} pixels wide. "
             f"Click \"Edit Stages...\" to paint them."
         )
 
+    def set_open_handler(self, handler):
+        """Let the owner open the painter instead (the wizard opens it on every state at
+        once, then hands results back through set_image)."""
+        self._open_handler = handler
+
+    def set_image(self, image: QtGui.QImage):
+        old_count = self.stage_count()
+        self._image = QtGui.QImage(image)
+        self._update_summary()
+        if self.stage_count() != old_count:
+            self.stage_count_changed.emit(self.stage_count())
+
     def _open_editor(self):
-        dialog = GrafxPixelEditorWindow(self._width, self._stage_count, self._colors, parent=self)
+        if self._open_handler is not None:
+            self._open_handler()
+            return
+        dialog = GrafxPixelEditorWindow(self._width, self.stage_count(), parent=self,
+                                        bmp_image=self._image, subject=self._subject)
         if dialog.exec() == QtWidgets.QDialog.Accepted:
-            self._colors = [[QtGui.QColor(c) for c in row] for row in dialog.colors()]
-            new_count = dialog.stage_count()
-            count_changed = new_count != self._stage_count
-            self._stage_count = new_count
+            old_count = self.stage_count()
+            self._image = dialog.to_bmp_image()
             self._update_summary()
-            if count_changed:
-                self.stage_count_changed.emit(self._stage_count)
+            if self.stage_count() != old_count:
+                self.stage_count_changed.emit(self.stage_count())
 
     def stage_count(self) -> int:
-        return self._stage_count
+        return self._image.height()
 
     def set_stage_count(self, new_count: int):
-        """Resize the painted grid to a new stage count, preserving already-painted stages
-        and filling any new ones with black - same convention as GrafxPixelGridWidget's own
-        set_stage_count, so this stays consistent with a resize done from inside the painter.
-        Lets the wizard page's "Number of stages" spinbox resize the animation directly,
-        without requiring the user to open "Edit Stages..." first."""
+        """Resize the painted animation to a new stage count, preserving already-painted
+        stages and filling any new ones with black - same convention as
+        GrafxPixelGridWidget.set_stage_count. Lets the wizard page's "Number of stages"
+        spinbox resize the animation without opening "Edit Stages..." first."""
         new_count = max(1, min(MAX_STAGE_COUNT, new_count))
-        if new_count == self._stage_count:
+        old_count = self.stage_count()
+        if new_count == old_count:
             return
-        for row in self._colors:
-            if new_count > len(row):
-                row.extend([QtGui.QColor(0, 0, 0)] * (new_count - len(row)))
-            else:
-                del row[new_count:]
-        self._stage_count = new_count
+        display = bmp_to_display(self._image)
+        if new_count < old_count:
+            display = display.copy(0, 0, new_count, self._width)
+        else:
+            display = _splice(display, _blank_image(new_count - old_count, self._width))
+        self._image = display_to_bmp(display)
         self._update_summary()
-        self.stage_count_changed.emit(self._stage_count)
+        self.stage_count_changed.emit(new_count)
 
     def to_image(self) -> QtGui.QImage:
-        image = QtGui.QImage(self._width, self._stage_count, QtGui.QImage.Format_RGB32)
-        for pixel_index in range(self._width):
-            for stage_index in range(self._stage_count):
-                bmp_row = self._stage_count - 1 - stage_index
-                image.setPixel(pixel_index, bmp_row, self._colors[pixel_index][stage_index].rgb())
-        return image
+        return QtGui.QImage(self._image)

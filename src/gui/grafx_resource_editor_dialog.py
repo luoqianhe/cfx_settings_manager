@@ -18,12 +18,13 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from core import grafx_reader, grafx_writer
+from core import grafx_reader, grafx_timing, grafx_writer
 from core.file_handler import CFXFileHandler
 from gui.grafx_creator_dialog import STATE_INFO
 from gui.widgets.grafx_parameter_panel import GrafxParameterPanel
+from gui.widgets.sound_match_panel import SYNCABLE_STATES, SoundMatchPanel
 from gui.widgets.grafx_stage_editor import (
-    DEFAULT_PREVIEW_DELAY_MS, MAX_RESOURCE_STAGES, GrafxPixelEditorWindow,
+    DEFAULT_PREVIEW_DELAY_MS, MAX_RESOURCE_STAGES, GrafxPixelEditorWindow, PainterDocument,
     GrafxStripPreview, bmp_to_display,
 )
 
@@ -37,7 +38,7 @@ class GrafxResourceEditorDialog(QtWidgets.QDialog):
         self.grafx_root = self.cfx_root / 'extra' / 'grafx'
         self.main_window = main_window
         self.setWindowTitle("Edit GraFx Resources")
-        self.resize(1180, 860)
+        self.resize(1180, 940)
 
         self.blade_pixel_count = self._blade_pixel_count()
         self.changed_folders = set()   # every folder written to, for the caller to refresh
@@ -104,6 +105,13 @@ class GrafxResourceEditorDialog(QtWidgets.QDialog):
         files_layout.addWidget(self.file_table, stretch=1)
         files_layout.addWidget(self.warning_label)
         files_layout.addWidget(self.edit_button)
+        # "Match to sound" for the selected file's state - rebuilt when the state changes.
+        self._sound_panel = None
+        self._sound_panel_key = None      # (folder, state) the panel was built for
+        self._sound_font = None           # last font picked, kept across states/files
+        self._linked_fonts = {}           # resource number -> fonts whose profile links it
+        self._sound_panel_holder = QtWidgets.QVBoxLayout()
+        files_layout.addLayout(self._sound_panel_holder)
 
         params_widget = QtWidgets.QWidget()
         params_layout = QtWidgets.QVBoxLayout(params_widget)
@@ -117,7 +125,7 @@ class GrafxResourceEditorDialog(QtWidgets.QDialog):
         splitter.addWidget(params_widget)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 2)
-        splitter.setSizes([260, 520])
+        splitter.setSizes([420, 480])
         splitter.setChildrenCollapsible(False)
 
         middle = QtWidgets.QVBoxLayout()
@@ -371,6 +379,7 @@ class GrafxResourceEditorDialog(QtWidgets.QDialog):
         entry = self._current_entry()
         has_entry = entry is not None
         self.edit_button.setEnabled(has_entry)
+        self._update_sound_panel(entry)
         if not has_entry:
             self._preview_image = None
             self.preview.stop()
@@ -402,6 +411,82 @@ class GrafxResourceEditorDialog(QtWidgets.QDialog):
         if self.preview_button.text() == "Pause":
             self.preview.play()
 
+    # ------------------------------------------------------------------ match to sound
+
+    def _update_sound_panel(self, entry):
+        state = entry.state if entry is not None else None
+        folder = entry.path.parent if entry is not None else None
+        usable = (state in SYNCABLE_STATES and self.main_window is not None
+                  and getattr(self.main_window, 'file_handler', None) is not None)
+        key = (folder, state) if usable else None
+        if key != self._sound_panel_key:
+            if self._sound_panel is not None:
+                self._sound_font = self._sound_panel.font_path()
+                self._sound_panel.setParent(None)
+                self._sound_panel.deleteLater()
+                self._sound_panel = None
+            self._sound_panel_key = key
+            if usable:
+                preferred = [self._sound_font] if self._sound_font else []
+                try:
+                    index = int(folder.name.split('-')[0])
+                    if index not in self._linked_fonts:     # scans every font - do it once
+                        self._linked_fonts[index] = self.main_window.fonts_linked_to_grafx(index)
+                    preferred += self._linked_fonts[index]
+                except (ValueError, AttributeError):
+                    pass
+                self._sound_panel = SoundMatchPanel(state, self.main_window, preferred)
+                self._sound_panel.apply_requested.connect(self._apply_sound_match)
+                # Never squashed by the splitter - the file table gives way instead.
+                self._sound_panel.setMinimumHeight(self._sound_panel.sizeHint().height())
+                self._sound_panel_holder.addWidget(self._sound_panel)
+        if self._sound_panel is not None and entry is not None:
+            settings = grafx_reader.section_settings(folder, state) or {}
+            try:
+                delay = int(settings.get('delay') or 0)
+            except ValueError:
+                delay = 0
+            stages = QtGui.QImageReader(str(entry.path)).size().height()
+            self._sound_panel.set_animation(stages, delay or None)
+
+    def _apply_sound_match(self, stage_count: int, delay_ms):
+        """Resize every BMP of the selected state to stage_count stages (stretched over
+        time) and set/clear that section's delay= - into a copy unless editing in place."""
+        entry = self._current_entry()
+        if entry is None:
+            return
+        if not self._confirm_discard_params(allow_cancel=True):
+            return
+        folder = entry.path.parent
+        files = [e.path.name for e in self._entries if e.state == entry.state]
+        section = grafx_reader.GRAFX_STATES[entry.state][0]
+        delay_text = f"delay={delay_ms}" if delay_ms else "no delay (synced)"
+        response = QtWidgets.QMessageBox.question(
+            self, "Match to Sound",
+            f"Resize {', '.join(files)} to {stage_count} stages (stretched or squashed over "
+            f"time) and set [{section}] to {delay_text}?")
+        if response != QtWidgets.QMessageBox.Yes:
+            return
+        target = self._writable_folder(folder)
+        if target is None:
+            return
+        for name in files:
+            path = target / name
+            image = QtGui.QImage(str(path))
+            if image.isNull():
+                continue
+            self._backup(path)
+            if not grafx_writer.save_bmp(grafx_timing.resample_stages(image, stage_count), path):
+                self._save_failed(path)
+                return
+        config = target / 'grafx1.txt'
+        self._backup(config)
+        grafx_writer.update_config_section(config, section,
+                                           {'delay': str(delay_ms) if delay_ms else None})
+        self.changed_folders.add(target)
+        self._reload_folders(select=target)
+        self._reload_files(select_name=entry.path.name)
+
     def _toggle_preview(self):
         if self.preview.is_playing():
             self.preview.stop()
@@ -413,65 +498,92 @@ class GrafxResourceEditorDialog(QtWidgets.QDialog):
     # ------------------------------------------------------------------ editing
 
     def _edit_pixels(self):
+        """Open the painter on every BMP in the resource (starting at the selected one), so
+        they can be switched between and previewed as a sequence. Save writes every file
+        that was changed; Save as New Variant writes the one on screen as the next
+        <prefix><N>.bmp and any other changed files in place."""
         # Both can switch to a new copy and reload the panel - settle parameter edits first.
         if not self._confirm_discard_params(allow_cancel=True):
             return
         entry = self._current_entry()
         if entry is None:
             return
-        image = QtGui.QImage(str(entry.path))
-        if image.isNull():
+        folder = entry.path.parent
+
+        documents = []
+        for e in self._entries:
+            image = QtGui.QImage(str(e.path))
+            if image.isNull():
+                continue
+            settings = grafx_reader.section_settings(folder, e.state)
+            try:
+                delay_ms = int((settings or {}).get('delay') or 0)
+            except ValueError:
+                delay_ms = 0
+            documents.append(PainterDocument(
+                e.path.name, f"{STATE_INFO.get(e.state, (e.state,))[0]} - {e.path.name}",
+                image, state=e.state, delay_ms=delay_ms if delay_ms > 0 else None,
+                warning=self._mismatch_text(image.width(), settings) or None))
+        if not any(doc.key == entry.path.name for doc in documents):
             QtWidgets.QMessageBox.warning(self, "Can't Open", f"Couldn't read {entry.path.name}.")
             return
-        folder = entry.path.parent
-        settings = grafx_reader.section_settings(folder, entry.state)
-        try:
-            delay_ms = int((settings or {}).get('delay', 0))
-        except ValueError:
-            delay_ms = 0
 
         self.preview.stop()
         dialog = GrafxPixelEditorWindow(
-            image.width(), image.height(), parent=self, bmp_image=image,
-            max_stages=MAX_RESOURCE_STAGES,
-            title=f"Edit {folder.name}/{entry.path.name}",
+            parent=self, documents=documents, current_key=entry.path.name,
+            max_stages=MAX_RESOURCE_STAGES, title=f"Edit GraFx Resource - {folder.name}",
             accept_buttons=[("Save as New Variant", 'variant'), ("Save", 'save')],
-            warning=self._mismatch_text(image.width(), settings) or None,
-            preview_delay_ms=delay_ms if delay_ms > 0 else None)
+            timing=self._sound_panel.timing() if self._sound_panel is not None
+            else self._fallback_timing())
         accepted = dialog.exec() == QtWidgets.QDialog.Accepted
         if self.preview_button.text() == "Pause":
             self.preview.play()
         if not accepted:
             return
 
+        current = dialog.current_document()
+        as_variant = dialog.chosen_action == 'variant'
+        in_place = [doc for doc in dialog.modified_documents()
+                    if not (as_variant and doc is current)]
+        if not in_place and not as_variant:
+            return      # nothing changed
         target = self._writable_folder(folder)
         if target is None:
             QtWidgets.QMessageBox.information(self, "Not Saved", "Your edits weren't saved.")
             return
-        edited = dialog.to_bmp_image()
-        section_name, prefix = grafx_reader.GRAFX_STATES[entry.state]
 
-        if dialog.chosen_action == 'variant':
+        select_name = current.key
+        for doc in in_place:
+            dest = target / doc.key
+            self._backup(dest)
+            if not grafx_writer.save_bmp(doc.to_bmp_image(), dest):
+                self._save_failed(dest)
+                return
+        if as_variant:
+            section_name, prefix = grafx_reader.GRAFX_STATES[current.state]
             existing = [e.variant for e in grafx_reader.list_grafx_files(target)
-                        if e.state == entry.state]
+                        if e.state == current.state]
             variant = max(existing, default=0) + 1
             dest = target / f"{prefix}{variant}.bmp"
             config = target / 'grafx1.txt'
             self._backup(config)
-            if not grafx_writer.save_bmp(edited, dest):
+            if not grafx_writer.save_bmp(current.to_bmp_image(), dest):
                 self._save_failed(dest)
                 return
             grafx_writer.update_config_section(config, section_name, {'many': str(variant)})
-        else:
-            dest = target / entry.path.name
-            self._backup(dest)
-            if not grafx_writer.save_bmp(edited, dest):
-                self._save_failed(dest)
-                return
+            select_name = dest.name
 
         self.changed_folders.add(target)
         self._reload_folders(select=target)
-        self._reload_files(select_name=dest.name)
+        self._reload_files(select_name=select_name)
+
+    def _fallback_timing(self):
+        """Font timing for the painter's preview when no Match-to-sound panel is showing:
+        the main window's selected font, if any."""
+        current = getattr(self.main_window, 'current_font_path', None)
+        if current is not None and hasattr(self.main_window, 'font_timing'):
+            return self.main_window.font_timing(current)
+        return None
 
     def _save_failed(self, path: Path):
         QtWidgets.QMessageBox.critical(self, "Save Failed", f"Couldn't write {path}.")

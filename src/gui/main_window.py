@@ -995,6 +995,7 @@ class MainWindow(QtWidgets.QMainWindow):
         has_issues = bool(
             report['structural_errors'] or report['global_errors'] or report['font_reports']
             or report['orphaned_profiles'] or report['orphaned_colors']
+            or report['grafx_warnings']
         )
         if has_issues:
             dialog = ValidationReportDialog(report, self.file_handler, self, backup_fn=self._backup_file)
@@ -1023,6 +1024,7 @@ class MainWindow(QtWidgets.QMainWindow):
             'font_reports': [],
             'orphaned_profiles': [],
             'orphaned_colors': [],
+            'grafx_warnings': [],
             'font_count': 0,
         }
 
@@ -1127,6 +1129,26 @@ class MainWindow(QtWidgets.QMainWindow):
                     font_errors[name] = msg
             grid.deleteLater()
 
+            # GraFx animations this font's blade profile links (style_grafx1/2/3) checked
+            # against its refreshfx and sound/qon/qoff timing - warnings, not errors.
+            from core.grafx_timing import FontTiming, check_resource
+            timing = FontTiming(font_path, all_settings, label=f"{font_num}-{font_name}")
+            checked_folders = set()   # the same resource on several slots is one set of warnings
+            for slot in (1, 2, 3):
+                try:
+                    grafx_index = int(str(all_settings.get(f'style_grafx{slot}', -1)).split()[0])
+                except (ValueError, IndexError):
+                    continue
+                folder = self.grafx_profile_paths.get(grafx_index)
+                if folder is None or folder in checked_folders:
+                    continue
+                checked_folders.add(folder)
+                for warning in check_resource(folder, timing):
+                    report['grafx_warnings'].append({
+                        'font_num': font_num, 'font_name': font_name, 'font_path': font_path,
+                        'resource': folder.name, 'slot': slot, **warning,
+                    })
+
             if font_errors or missing_font_keys:
                 report['font_reports'].append({
                     'font_num': font_num, 'font_name': font_name, 'font_path': font_path,
@@ -1138,6 +1160,52 @@ class MainWindow(QtWidgets.QMainWindow):
         report['orphaned_colors'] = sorted(all_color_numbers - referenced_colors)
 
         return report
+
+    def font_timing(self, font_path):
+        """core.grafx_timing.FontTiming for a font: its sounds plus its effective settings
+        (global -> blade profile -> color -> font_config.txt). The currently selected font
+        uses the live settings grid, so unsaved edits (e.g. to refreshfx or qon) count."""
+        from core.grafx_timing import FontTiming
+        font_path = Path(font_path)
+        label = font_path.name
+        if self.current_font_path is not None and Path(self.current_font_path) == font_path:
+            return FontTiming(font_path, self.settings_grid.get_current_settings(), label)
+        settings = self.file_handler.load_font_config(font_path) or {}
+        try:
+            font_num = int(font_path.name.split('-')[0])
+        except ValueError:
+            font_num = 0
+        profile, color = self._resolve_effective_profile_and_color(
+            settings, font_num, self.file_handler.load_preferences())
+        merged = dict(self.file_handler.load_master_config())
+        for number, loader in ((profile, self.file_handler.load_blade_profile),
+                               (color, self.file_handler.load_color_profile)):
+            try:
+                merged.update(loader(int(number)) or {})
+            except (TypeError, ValueError):
+                pass
+        merged.update(settings)
+        return FontTiming(font_path, merged, label)
+
+    def fonts_linked_to_grafx(self, grafx_index: int):
+        """Font folders whose blade profile links this GraFx resource number through
+        style_grafx1/2/3 - the fonts whose sounds/refreshfx it plays with."""
+        linked = []
+        prefs = self.file_handler.load_preferences()
+        for font_num, _font_name, font_path in self.file_handler.load_font_folders():
+            settings = self.file_handler.load_font_config(font_path) or {}
+            profile, _color = self._resolve_effective_profile_and_color(settings, font_num, prefs)
+            try:
+                blade = self.file_handler.load_blade_profile(int(profile)) or {}
+            except (TypeError, ValueError):
+                blade = {}
+            merged = dict(blade)
+            merged.update(settings)
+            for slot in (1, 2, 3):
+                if str(merged.get(f'style_grafx{slot}', '')).split()[:1] == [str(grafx_index)]:
+                    linked.append(font_path)
+                    break
+        return linked
 
     def _jump_to_font(self, font_path_str):
         """Select the given font in the list and load it, e.g. from the validation report."""
