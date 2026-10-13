@@ -129,6 +129,8 @@ def display_to_bmp(image: QtGui.QImage) -> QtGui.QImage:
 
 TAN_22_5 = math.tan(math.radians(22.5))
 
+GRADIENT_SHAPES = ('linear', 'radial', 'elliptical')
+
 GRADIENT_SPREADS = {
     'none': QtGui.QGradient.PadSpread,      # Color 1 before the start, Color 2 past the end
     'repeat': QtGui.QGradient.RepeatSpread,  # 1->2, 1->2, ...
@@ -231,6 +233,11 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
         self._gradient_start_color = QtGui.QColor(255, 255, 255)   # gradient Color 1
         self._gradient_color = QtGui.QColor(0, 0, 0)                # gradient Color 2
         self._gradient_spread = 'none'
+        self._gradient_shape = 'linear'  # 'linear', 'radial' (circle) or 'elliptical'
+        self._bucket_tolerance = 0       # max per-channel difference still counted as a match
+        self._bucket_replace_all = False  # every matching cell, not just the connected area
+        self._bucket_mode = 'solid'      # 'solid' (Paint color) or 'gradient' (Color 1 -> 2)
+        self._bucket = None              # (bbox, mask) of a gradient bucket fill being dragged
         self._arc_flip_h = False         # mirror the arc tool's bulge left/right
         self._arc_flip_v = False         # mirror the arc tool's bulge up/down
         self._selection = None           # (first_stage, last_stage) inclusive, or None
@@ -271,6 +278,15 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
     def set_gradient_colors(self, color1: QtGui.QColor, color2: QtGui.QColor):
         self._gradient_start_color = QtGui.QColor(color1)
         self._gradient_color = QtGui.QColor(color2)
+        self.update()
+
+    def set_bucket_options(self, tolerance: int, replace_all: bool, mode: str):
+        self._bucket_tolerance = max(0, int(tolerance))
+        self._bucket_replace_all = bool(replace_all)
+        self._bucket_mode = mode if mode in ('solid', 'gradient') else 'solid'
+
+    def set_gradient_shape(self, shape: str):
+        self._gradient_shape = shape if shape in GRADIENT_SHAPES else 'linear'
         self.update()
 
     def set_gradient_spread(self, spread: str):
@@ -514,28 +530,49 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
             return self._selection_rect()
         return self._image.rect()
 
-    def _gradient_image(self, region: QtCore.QRect, p0: int, s0: int, p1: int, s1: int):
-        """The region filled with a Color 1 -> Color 2 linear gradient running from the
-        center of cell (p0, s0) to the center of cell (p1, s1), so both end cells get their
-        colors exactly. None for a zero-length drag."""
+    def _radii(self, p0, s0, p1, s1, shape):
+        """(horizontal, vertical) radius in cells of a radial/elliptical gradient dragged
+        from its center (p0, s0) to (p1, s1). A circle uses the drag length both ways (so it's
+        round in cells - 1 stage = 1 pixel - whatever the zoom); an ellipse takes the drag's
+        horizontal and vertical extent separately (a flat axis gets half a cell, so a
+        horizontal-only drag still makes a thin band rather than nothing)."""
+        if shape == 'radial':
+            radius = math.hypot(s1 - s0, p1 - p0)
+            return radius, radius
+        return max(0.5, abs(s1 - s0)), max(0.5, abs(p1 - p0))
+
+    def _gradient_image(self, region: QtCore.QRect, p0, s0, p1, s1, shape: str = None):
+        """The region filled with a Color 1 -> Color 2 gradient from the center of cell
+        (p0, s0) to the center of cell (p1, s1), so both get their colors exactly. Linear
+        runs along that line; radial/elliptical put Color 1 at (p0, s0) and Color 2 on the
+        circle/ellipse through (p1, s1). None for a zero-length drag."""
         if (p0, s0) == (p1, s1):
             return None
+        shape = shape or self._gradient_shape
         top = self.pixel_count() - 1
-        gradient = QtGui.QLinearGradient(
-            s0 + 0.5 - region.x(), top - p0 + 0.5 - region.y(),
-            s1 + 0.5 - region.x(), top - p1 + 0.5 - region.y())
+        x0, y0 = s0 + 0.5 - region.x(), top - p0 + 0.5 - region.y()
+        x1, y1 = s1 + 0.5 - region.x(), top - p1 + 0.5 - region.y()
+        if shape == 'linear':
+            gradient = QtGui.QLinearGradient(x0, y0, x1, y1)
+        else:
+            gradient = QtGui.QRadialGradient(0, 0, 1)
         gradient.setColorAt(0.0, self._gradient_start_color)
         gradient.setColorAt(1.0, self._gradient_color)
         gradient.setSpread(GRADIENT_SPREADS[self._gradient_spread])
+        brush = QtGui.QBrush(gradient)
+        if shape != 'linear':
+            # A unit circle stretched to the radii - Qt has no elliptical gradient as such.
+            rx, ry = self._radii(p0, s0, p1, s1, shape)
+            brush.setTransform(QtGui.QTransform().translate(x0, y0).scale(rx, ry))
         image = QtGui.QImage(region.size(), QtGui.QImage.Format_RGB32)
         painter = QtGui.QPainter(image)
-        painter.fillRect(image.rect(), QtGui.QBrush(gradient))
+        painter.fillRect(image.rect(), brush)
         painter.end()
         return image
 
-    def _apply_gradient(self, p0: int, s0: int, p1: int, s1: int) -> bool:
+    def _apply_gradient(self, p0, s0, p1, s1, shape: str = None) -> bool:
         region = self._gradient_region()
-        image = self._gradient_image(region, p0, s0, p1, s1)
+        image = self._gradient_image(region, p0, s0, p1, s1, shape)
         if image is None:
             return False
         self.push_undo_snapshot()
@@ -554,8 +591,115 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
         region = self._gradient_region()
         first, last = region.left(), region.right()
         if direction == 'time':
-            return self._apply_gradient(0, first, 0, last)
-        return self._apply_gradient(0, first, self.pixel_count() - 1, first)
+            return self._apply_gradient(0, first, 0, last, shape='linear')
+        return self._apply_gradient(0, first, self.pixel_count() - 1, first, shape='linear')
+
+    # ------------------------------------------------------------------ paint bucket
+
+    def _bucket_mask(self, pixel_index: int, stage_index: int):
+        """The cells a bucket click at (pixel_index, stage_index) fills: everything connected
+        to it (up/down/left/right - not diagonally) whose color is within the tolerance of
+        the clicked cell's, or every such cell when replacing everywhere; limited to the
+        selected stages if any. Returns (bbox, mask) - mask is a bbox-sized ARGB32 image,
+        opaque on filled cells - or None if the click is outside the selection."""
+        region = self._gradient_region()
+        width = self._image.width()
+        x0, y0 = stage_index, self.pixel_count() - 1 - pixel_index
+        if not region.contains(x0, y0):
+            return None
+        data = memoryview(self._image.constBits()).cast('I')
+        target = data[y0 * width + x0] & 0xFFFFFF
+        tol = self._bucket_tolerance
+        if tol == 0:
+            def match(c):
+                return (c & 0xFFFFFF) == target
+        else:
+            tr, tg, tb = (target >> 16) & 255, (target >> 8) & 255, target & 255
+
+            def match(c):
+                return (abs(((c >> 16) & 255) - tr) <= tol and abs(((c >> 8) & 255) - tg) <= tol
+                        and abs((c & 255) - tb) <= tol)
+        left, right, top, bottom = region.left(), region.right(), region.top(), region.bottom()
+        cells = []
+        if self._bucket_replace_all:
+            for y in range(top, bottom + 1):
+                base = y * width
+                cells.extend(base + x for x in range(left, right + 1) if match(data[base + x]))
+        else:
+            seen = bytearray(width * self._image.height())
+            stack = [y0 * width + x0]
+            while stack:
+                i = stack.pop()
+                if seen[i]:
+                    continue
+                seen[i] = 1
+                if not match(data[i]):
+                    continue
+                cells.append(i)
+                x, y = i % width, i // width
+                if x > left:
+                    stack.append(i - 1)
+                if x < right:
+                    stack.append(i + 1)
+                if y > top:
+                    stack.append(i - width)
+                if y < bottom:
+                    stack.append(i + width)
+        data.release()
+
+        xs = [i % width for i in cells]
+        ys = [i // width for i in cells]
+        bbox = QtCore.QRect(min(xs), min(ys), max(xs) - min(xs) + 1, max(ys) - min(ys) + 1)
+        mask = bytearray(bbox.width() * bbox.height() * 4)
+        for x, y in zip(xs, ys):
+            mask[((y - bbox.y()) * bbox.width() + (x - bbox.x())) * 4 + 3] = 255
+        return bbox, QtGui.QImage(bytes(mask), bbox.width(), bbox.height(),
+                                  QtGui.QImage.Format_ARGB32).copy()
+
+    def _bucket_gradient_ends(self, bbox: QtCore.QRect, anchor, end):
+        """A dragged gradient bucket fill runs along the drag. A plain click: linear runs
+        Color 1 -> Color 2 across the filled area over time (left to right), or hilt -> tip
+        if it's only one stage wide; radial/elliptical are centered on the filled area and
+        reach its outermost cells - so clicking inside a circle shades it center -> rim."""
+        if end != anchor:
+            return anchor, end
+        top = self.pixel_count() - 1
+        if self._gradient_shape != 'linear':
+            center_s = bbox.left() + (bbox.width() - 1) / 2
+            center_p = top - (bbox.top() + (bbox.height() - 1) / 2)
+            rx, ry = (bbox.width() - 1) / 2, (bbox.height() - 1) / 2
+            if self._gradient_shape == 'radial':
+                # The drag length is the radius, so the edge goes straight out sideways.
+                return (center_p, center_s), (center_p, center_s + max(rx, ry, 0.5))
+            return (center_p, center_s), (center_p + max(ry, 0.5), center_s + max(rx, 0.5))
+        if bbox.width() > 1:
+            return (anchor[0], bbox.left()), (anchor[0], bbox.right())
+        return (top - bbox.bottom(), anchor[1]), (top - bbox.top(), anchor[1])
+
+    def _bucket_layer(self, bbox: QtCore.QRect, mask: QtGui.QImage, ends=None) -> QtGui.QImage:
+        """The fill's colors (Paint color, or the gradient) cut out by the mask."""
+        layer = None
+        if self._bucket_mode == 'gradient' and ends is not None:
+            (p0, s0), (p1, s1) = ends
+            layer = self._gradient_image(bbox, p0, s0, p1, s1)
+        if layer is None:
+            layer = QtGui.QImage(bbox.size(), QtGui.QImage.Format_RGB32)
+            layer.fill(self._gradient_start_color if self._bucket_mode == 'gradient'
+                       else self._paint_color)
+        layer = layer.convertToFormat(QtGui.QImage.Format_ARGB32)
+        painter = QtGui.QPainter(layer)
+        painter.setCompositionMode(QtGui.QPainter.CompositionMode_DestinationIn)
+        painter.drawImage(0, 0, mask)
+        painter.end()
+        return layer
+
+    def _apply_bucket(self, bbox: QtCore.QRect, layer: QtGui.QImage):
+        self.push_undo_snapshot()
+        painter = QtGui.QPainter(self._image)
+        painter.drawImage(bbox.topLeft(), layer)
+        painter.end()
+        self.update()
+        self.cell_painted.emit()
 
     # ------------------------------------------------------------------ painting
 
@@ -597,7 +741,14 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
     def _drag_end(self, shift: bool):
         """The current Line/Gradient drag end, snapped to 45 degrees while Shift is held."""
         p1, s1 = self._stroke_preview_end or self._stroke_anchor
-        if shift and self._tool in ('line', 'gradient'):
+        if shift and self._tool in ('gradient', 'bucket') and self._gradient_shape == 'elliptical':
+            # Shift makes the ellipse a circle: equal radii, the larger of the two.
+            p0, s0 = self._stroke_anchor
+            r = max(abs(p1 - p0), abs(s1 - s0))
+            return p0 + (r if p1 >= p0 else -r), s0 + (r if s1 >= s0 else -r)
+        if shift and self._tool in ('gradient', 'bucket') and self._gradient_shape == 'radial':
+            return p1, s1            # a circle's direction doesn't matter - nothing to snap
+        if shift and self._tool in ('line', 'gradient', 'bucket'):
             p0, s0 = self._stroke_anchor
             return _snap_45(p0, s0, p1, s1, self.pixel_count(), self.stage_count())
         return p1, s1
@@ -627,6 +778,19 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
             else:
                 self._select_anchor = stage_index
             self.set_selection(self._select_anchor, stage_index)
+        elif self._tool == 'bucket':
+            result = self._bucket_mask(pixel_index, stage_index)
+            if result is None:
+                return
+            bbox, mask = result
+            if self._bucket_mode == 'solid':
+                self._apply_bucket(bbox, self._bucket_layer(bbox, mask))
+            else:
+                # Gradient: the drag (if any) sets its direction - applied on release.
+                self._bucket = (bbox, mask)
+                self._stroke_anchor = (pixel_index, stage_index)
+                self._stroke_preview_end = (pixel_index, stage_index)
+                self.update()
         elif self._tool in ('line', 'arc', 'gradient'):
             self._stroke_anchor = (pixel_index, stage_index)
             self._stroke_preview_end = (pixel_index, stage_index)
@@ -647,7 +811,7 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
             return
         if self._tool == 'select' and self._select_anchor is not None:
             self.set_selection(self._select_anchor, stage_index)
-        elif self._tool in ('line', 'arc', 'gradient') and self._stroke_anchor is not None:
+        elif self._tool in ('line', 'arc', 'gradient', 'bucket') and self._stroke_anchor is not None:
             self._stroke_preview_end = (pixel_index, stage_index)
             self.update()
         elif self._tool == 'freehand' and self._last_freehand is not None:
@@ -665,6 +829,14 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
             return
         self._last_freehand = None
         self._select_anchor = None
+        if self._tool == 'bucket' and self._bucket is not None and self._stroke_anchor is not None:
+            bbox, mask = self._bucket
+            ends = self._bucket_gradient_ends(
+                bbox, self._stroke_anchor,
+                self._drag_end(bool(event.modifiers() & QtCore.Qt.ShiftModifier)))
+            self._bucket = self._stroke_anchor = self._stroke_preview_end = None
+            self._apply_bucket(bbox, self._bucket_layer(bbox, mask, ends))
+            return
         if self._tool in ('line', 'arc', 'gradient') and self._stroke_anchor is not None:
             p0, s0 = self._stroke_anchor
             p1, s1 = self._drag_end(bool(event.modifiers() & QtCore.Qt.ShiftModifier))
@@ -701,7 +873,7 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
             first, last = self._selection
             rect = QtCore.QRectF(first * cw, 0, (last - first + 1) * cw, self.height())
             pen = QtGui.QPen(QtGui.QColor(80, 160, 255))
-            if self._tool in ('select', 'gradient'):
+            if self._tool in ('select', 'gradient', 'bucket'):
                 # The tools the selection actually limits - show it in full.
                 painter.fillRect(rect, QtGui.QColor(80, 160, 255, 70))
                 pen.setWidth(2)
@@ -721,13 +893,21 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
                 preview_color.setAlpha(160)
                 for p, s in self._stroke_cells(p0, s0, p1, s1):
                     painter.fillRect(self._cell_rect(p, s), preview_color)
-            elif self._tool == 'gradient':
-                region = self._gradient_region()
-                image = self._gradient_image(region, p0, s0, p1, s1)
-                if image is not None:
-                    painter.drawImage(QtCore.QRect(region.x() * cw, region.y() * ch,
-                                                   region.width() * cw, region.height() * ch),
-                                      image)
+            elif self._tool == 'bucket' and self._bucket is not None:
+                bbox, mask = self._bucket
+                layer = self._bucket_layer(bbox, mask,
+                                           self._bucket_gradient_ends(bbox, (p0, s0), (p1, s1)))
+                painter.drawImage(QtCore.QRect(bbox.x() * cw, bbox.y() * ch,
+                                               bbox.width() * cw, bbox.height() * ch), layer)
+            if self._tool == 'gradient' or (self._tool == 'bucket' and self._bucket is not None
+                                            and (p0, s0) != (p1, s1)):
+                if self._tool == 'gradient':
+                    region = self._gradient_region()
+                    image = self._gradient_image(region, p0, s0, p1, s1)
+                    if image is not None:
+                        painter.drawImage(QtCore.QRect(region.x() * cw, region.y() * ch,
+                                                       region.width() * cw, region.height() * ch),
+                                          image)
                 pen = QtGui.QPen(QtGui.QColor(255, 255, 255))
                 pen.setStyle(QtCore.Qt.DashLine)
                 painter.setPen(pen)
@@ -736,6 +916,10 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
                 painter.drawLine(start, end)
                 painter.drawEllipse(start, 3, 3)
                 painter.drawEllipse(end, 3, 3)
+                if self._gradient_shape != 'linear':
+                    rx, ry = self._radii(p0, s0, p1, s1, self._gradient_shape)
+                    painter.setBrush(QtCore.Qt.NoBrush)
+                    painter.drawEllipse(start, rx * cw, ry * ch)
 
         painter.setPen(QtGui.QColor(60, 60, 60))
         painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
@@ -1064,7 +1248,7 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
 
         self._paint_container, self._color_widgets = create_rgb_picker_widget(
             "Paint color", (255, 255, 255))
-        self._paint_container.setToolTip("Used by Freehand, Line, Arc, Fill All Stages and "
+        self._paint_container.setToolTip("Used by Freehand, Line, Arc, Bucket (Paint color), Fill All Stages and "
                                          "the presets. Not used by the Gradient tool.")
         r_spin, g_spin, b_spin, _swatch = self._color_widgets
         for spin in (r_spin, g_spin, b_spin):
@@ -1086,13 +1270,26 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         swap_button.setToolTip("Swap Color 1 and Color 2")
         swap_button.clicked.connect(self._swap_colors)
         gradient_options.addWidget(swap_button)
+        self._shape_combo = QtWidgets.QComboBox()
+        for key, label in (('linear', "Linear"), ('radial', "Radial (circle)"),
+                           ('elliptical', "Elliptical")):
+            self._shape_combo.addItem(label, key)
+        self._shape_combo.setToolTip(
+            "Linear: Color 1 → Color 2 along the drag. Radial: Color 1 at the center you "
+            "press, Color 2 on the circle you drag out to (round in cells: 1 stage = 1 pixel). "
+            "Elliptical: separate radii over time (stages) and along the blade (pixels); "
+            "Shift makes it a circle. For outside-in, Swap the colors.")
+        self._shape_combo.currentIndexChanged.connect(
+            lambda: self._grid.set_gradient_shape(self._shape_combo.currentData()))
+        gradient_options.addWidget(self._shape_combo)
         self._spread_combo = QtWidgets.QComboBox()
         for key, label in (('none', "No repeat"), ('repeat', "Repeat"),
                            ('mirror', "Mirror (loops seamlessly)")):
             self._spread_combo.addItem(label, key)
         self._spread_combo.setToolTip(
             "What happens past the end of a dragged gradient. Mirror goes 1→2→1→…, so a "
-            "pulse ends on the color it started with and loops without a jump.")
+            "pulse ends on the color it started with and loops without a jump. With Radial/"
+            "Elliptical, Repeat and Mirror make concentric rings.")
         self._spread_combo.currentIndexChanged.connect(
             lambda: self._grid.set_gradient_spread(self._spread_combo.currentData()))
         gradient_options.addWidget(self._spread_combo)
@@ -1118,7 +1315,8 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         tool_col.addWidget(QtWidgets.QLabel("Tool:"))
         self._tool_group = QtWidgets.QButtonGroup(self)
         for key, label in (('freehand', "Freehand"), ('line', "Line"), ('arc', "Arc"),
-                           ('gradient', "Gradient"), ('select', "Select stages")):
+                           ('gradient', "Gradient"), ('bucket', "Bucket (fill)"),
+                           ('select', "Select stages")):
             radio = QtWidgets.QRadioButton(label)
             radio.setProperty('tool', key)
             radio.setChecked(key == 'freehand')
@@ -1142,6 +1340,33 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         self._brush_spin.valueChanged.connect(lambda value: self._grid.set_brush_size(value))
         settings_col.addRow("Brush size:", self._brush_spin)
 
+        bucket_row = QtWidgets.QHBoxLayout()
+        self._bucket_mode_combo = QtWidgets.QComboBox()
+        self._bucket_mode_combo.addItem("Paint color", 'solid')
+        self._bucket_mode_combo.addItem("Gradient (Color 1 → 2)", 'gradient')
+        self._bucket_mode_combo.setToolTip(
+            "Fill with the Paint color, or with the Color 1 → Color 2 gradient. For a "
+            "gradient, click to run it across the area over time, or drag from the clicked "
+            "cell to set its direction (Shift snaps to 45°).")
+        self._bucket_tolerance_spin = QtWidgets.QSpinBox()
+        self._bucket_tolerance_spin.setRange(0, 255)
+        self._bucket_tolerance_spin.setPrefix("±")
+        self._bucket_tolerance_spin.setToolTip(
+            "Tolerance: also fill cells whose red, green and blue are each within this much "
+            "of the clicked cell's (0 = exact color only). Useful on fades and gradients.")
+        self._bucket_all_check = QtWidgets.QCheckBox("Replace everywhere")
+        self._bucket_all_check.setToolTip(
+            "Fill every cell of that color, not just the connected area - e.g. to swap one "
+            "color for another throughout the animation (or the selected stages).")
+        for widget, signal in ((self._bucket_mode_combo, 'currentIndexChanged'),
+                               (self._bucket_tolerance_spin, 'valueChanged'),
+                               (self._bucket_all_check, 'toggled')):
+            getattr(widget, signal).connect(self._sync_bucket_options)
+        bucket_row.addWidget(self._bucket_mode_combo)
+        bucket_row.addWidget(self._bucket_tolerance_spin)
+        bucket_row.addWidget(self._bucket_all_check)
+        settings_col.addRow("Bucket fill:", bucket_row)
+
         self._stage_count_spin = QtWidgets.QSpinBox()
         self._stage_count_spin.setRange(1, self._max_stages)
         self._stage_count_spin.setKeyboardTracking(False)
@@ -1164,6 +1389,7 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         zoom_row.addWidget(QtWidgets.QLabel("×"))
         zoom_row.addWidget(self._zoom_h_spin)
         zoom_row.addWidget(fit_button)
+        zoom_row.addStretch()
         settings_col.addRow("Zoom (cell px):", zoom_row)
         tools_row.addLayout(settings_col)
 
@@ -1175,8 +1401,10 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
             "(left = stage 1, played first). Left-click/drag to paint (Freehand), or click-"
             "drag-release to draw a straight line (Line), a curve (Arc) or a Color 1 → Color 2 "
             "gradient (Gradient - fills the selected stages, or everything; right-click picks "
-            "up Color 1, Shift+right-click Color 2). Hold Shift with "
-            "Line or Gradient to snap to horizontal/vertical/45°; Shift-click with Freehand "
+            "up Color 1, Shift+right-click Color 2). Bucket fills the clicked area (within the "
+            "selected stages, if any) with the Paint color or the gradient. Hold Shift with "
+            "Line, Gradient or a gradient Bucket drag to snap to horizontal/vertical/45°; "
+            "Shift-click with Freehand "
             "draws a line from the last painted cell. Right-click picks up a cell's color. "
             "With Select stages, drag across columns (Shift-click to extend) and use the stage "
             "buttons below; Esc or Select None clears the selection. Ctrl+Z / Ctrl+Shift+Z "
@@ -1396,7 +1624,9 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         self._grid.set_paint_color(self._current_paint_color())
         self._sync_gradient_color()
         self._grid.set_gradient_spread(self._spread_combo.currentData())
+        self._grid.set_gradient_shape(self._shape_combo.currentData())
         self._grid.set_tool(self._tool_group.checkedButton().property('tool'))
+        self._sync_bucket_options()
         self._grid.set_brush_size(self._brush_spin.value())
         self._grid.set_arc_flip_h(self._flip_h_check.isChecked())
         self._grid.set_arc_flip_v(self._flip_v_check.isChecked())
@@ -1431,6 +1661,7 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
             text = ("• " if doc.is_modified() else "") + doc.label
             if self._doc_combo.itemText(index) != text:
                 self._doc_combo.setItemText(index, text)
+                self._doc_combo.adjustSize()   # room for the added "• "
 
     def _update_undo_buttons(self):
         self._undo_button.setEnabled(self._grid.can_undo())
@@ -1567,10 +1798,22 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
 
     # ------------------------------------------------------------------ colors
 
+    def _uses_gradient_colors(self) -> bool:
+        """The current tool paints with Color 1 → Color 2, not the Paint color."""
+        tool = self._tool_group.checkedButton().property('tool')
+        return tool == 'gradient' or (tool == 'bucket'
+                                      and self._bucket_mode_combo.currentData() == 'gradient')
+
     def _on_tool_changed(self, tool: str):
         self._grid.set_tool(tool)
-        # The Gradient tool paints with Color 1 → Color 2 only.
-        self._paint_container.setEnabled(tool != 'gradient')
+        self._paint_container.setEnabled(not self._uses_gradient_colors())
+
+    def _sync_bucket_options(self, *_args):
+        if self._grid is not None:
+            self._grid.set_bucket_options(self._bucket_tolerance_spin.value(),
+                                          self._bucket_all_check.isChecked(),
+                                          self._bucket_mode_combo.currentData())
+        self._paint_container.setEnabled(not self._uses_gradient_colors())
 
     def _sync_paint_color(self):
         if self._grid is not None:
@@ -1618,7 +1861,7 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
     def _on_eyedrop(self, color: QtGui.QColor):
         """Right-click picks up a color into the Paint color - or, with the Gradient tool,
         into Color 1 (Shift+right-click: Color 2)."""
-        if self._tool_group.checkedButton().property('tool') == 'gradient':
+        if self._uses_gradient_colors():
             shift = QtWidgets.QApplication.keyboardModifiers() & QtCore.Qt.ShiftModifier
             self._set_picker_color(self._color2_widgets if shift else self._color1_widgets, color)
         else:
