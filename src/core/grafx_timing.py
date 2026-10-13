@@ -14,8 +14,9 @@ What the manual (rev 1.19, "GraFx BMP size and sequence duration considerations"
 
 Sound file names per state (manual's sound list): poweron<N>.wav; poweroff<N>.wav plus the
 alternate pwroff2.wav (played on a power-off while moving); preon<N>.wav; pstoff<N>.wav.
-The looping states (idle, lockup, ...) have no single sound length, so only their delay
-is checked.
+Looping states with a looping sound - Idle lit (humM<N>.wav) and Lockup (lockup<N>.wav) -
+are matched to one loop of that sound; the blade-off Idle and Forever have no sound, so only
+their delay is checked.
 """
 import re
 import wave
@@ -33,6 +34,13 @@ SOUND_ACTIONS = {
     'postoff': ('pstoff',),
 }
 QUICK_PARAMS = {'poweron': 'qon', 'poweroff': 'qoff'}
+# Looping states' sounds - same names the main window's blade preview plays. The sound loops
+# for as long as the state lasts; a synced animation of one loop's length stays in step with
+# it on every repeat, so it's what "match the sound" sizes these states to.
+LOOP_SOUND_ACTIONS = {
+    'leds': ('humM',),
+    'lockup': ('lockup',),
+}
 
 _duration_cache: Dict[str, Optional[int]] = {}
 
@@ -48,9 +56,9 @@ def wav_duration_ms(path: Path) -> Optional[int]:
     return _duration_cache[key]
 
 
-def state_sounds(font_path: Optional[Path], state: str) -> List[tuple]:
+def state_sounds(font_path: Optional[Path], state: str, actions=None) -> List[tuple]:
     """[(path, duration_ms)] of every sound that can play with this state."""
-    actions = SOUND_ACTIONS.get(state)
+    actions = actions or SOUND_ACTIONS.get(state)
     if not actions or font_path is None or not Path(font_path).is_dir():
         return []
     pattern = re.compile(r'^(%s)(\d*)\.wav$' % '|'.join(map(re.escape, actions)), re.IGNORECASE)
@@ -84,13 +92,19 @@ class FontTiming:
     def sounds(self, state: str) -> List[tuple]:
         return state_sounds(self.font_path, state)
 
+    def loop_sounds(self, state: str) -> List[tuple]:
+        """The hum (Idle lit) / lockup sounds that loop while a looping state plays."""
+        actions = LOOP_SOUND_ACTIONS.get(state)
+        return state_sounds(self.font_path, state, actions) if actions else []
+
     def basis(self, state: str) -> Optional[dict]:
         """What a synced (no delay) state is timed to: {'duration_ms' (shortest - the worst
         case), 'longest_ms', 'source' ('qon'/'qoff'/'sound'), 'description'}; None for
         states with nothing to sync to."""
         quick_param = QUICK_PARAMS.get(state)
         quick = _int(self.settings, quick_param) if quick_param else None
-        sounds = self.sounds(state)
+        sounds = self.sounds(state) or self.loop_sounds(state)
+        looping = state in LOOP_SOUND_ACTIONS
         if quick and quick > 0:
             return {'duration_ms': quick, 'longest_ms': quick, 'source': quick_param,
                     'description': f"{quick_param}={quick} ms (quick-on/off is set, so the "
@@ -100,8 +114,9 @@ class FontTiming:
         durations = [d for _p, d in sounds]
         low, high = min(durations), max(durations)
         span = f"{low} ms" if low == high else f"{low}–{high} ms"
+        kind = f"{LOOP_SOUND_ACTIONS[state][0]} loop" if looping else "sound"
         return {'duration_ms': low, 'longest_ms': high, 'source': 'sound',
-                'description': f"{len(sounds)} sound file(s), {span}"}
+                'description': f"{len(sounds)} {kind} file(s), {span}"}
 
     def max_synced_stages(self, state: str) -> Optional[int]:
         """Most stages a synced animation can have and still play to the end every time."""

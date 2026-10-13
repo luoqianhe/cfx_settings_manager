@@ -25,6 +25,7 @@ import random
 from PySide6 import QtCore, QtGui, QtMultimedia, QtWidgets
 
 from core import grafx_writer
+from core.grafx_timing import resample_stages
 from core.sound_player import route_to_default_output
 from gui.widgets.widget_factory import create_rgb_picker_widget
 
@@ -238,6 +239,7 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
         self._bucket_replace_all = False  # every matching cell, not just the connected area
         self._bucket_mode = 'solid'      # 'solid' (Paint color) or 'gradient' (Color 1 -> 2)
         self._bucket = None              # (bbox, mask) of a gradient bucket fill being dragged
+        self._ellipse_filled = True      # Circle/ellipse tool: filled, or a brush-wide outline
         self._arc_flip_h = False         # mirror the arc tool's bulge left/right
         self._arc_flip_v = False         # mirror the arc tool's bulge up/down
         self._selection = None           # (first_stage, last_stage) inclusive, or None
@@ -278,6 +280,10 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
     def set_gradient_colors(self, color1: QtGui.QColor, color2: QtGui.QColor):
         self._gradient_start_color = QtGui.QColor(color1)
         self._gradient_color = QtGui.QColor(color2)
+        self.update()
+
+    def set_ellipse_filled(self, filled: bool):
+        self._ellipse_filled = bool(filled)
         self.update()
 
     def set_bucket_options(self, tolerance: int, replace_all: bool, mode: str):
@@ -741,7 +747,8 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
     def _drag_end(self, shift: bool):
         """The current Line/Gradient drag end, snapped to 45 degrees while Shift is held."""
         p1, s1 = self._stroke_preview_end or self._stroke_anchor
-        if shift and self._tool in ('gradient', 'bucket') and self._gradient_shape == 'elliptical':
+        if shift and (self._tool == 'ellipse' or (self._tool in ('gradient', 'bucket')
+                                                   and self._gradient_shape == 'elliptical')):
             # Shift makes the ellipse a circle: equal radii, the larger of the two.
             p0, s0 = self._stroke_anchor
             r = max(abs(p1 - p0), abs(s1 - s0))
@@ -753,7 +760,29 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
             return _snap_45(p0, s0, p1, s1, self.pixel_count(), self.stage_count())
         return p1, s1
 
+    def _ellipse_cells(self, p0: int, s0: int, p1: int, s1: int):
+        """Cells of a circle/ellipse centered on (p0, s0) whose radii are the drag's extent:
+        horizontal = stages (time), vertical = pixels (along the blade); a flat axis gets
+        half a cell. Filled, or an outline as thick as the brush."""
+        rx, ry = max(0.5, abs(s1 - s0)), max(0.5, abs(p1 - p0))
+        width = self._brush_size
+        inner_rx, inner_ry = rx - width, ry - width
+        cells = []
+        for s in range(max(0, math.floor(s0 - rx)), min(self.stage_count() - 1, math.ceil(s0 + rx)) + 1):
+            ds = s - s0
+            for p in range(max(0, math.floor(p0 - ry)), min(self.pixel_count() - 1, math.ceil(p0 + ry)) + 1):
+                dp = p - p0
+                if (ds / rx) ** 2 + (dp / ry) ** 2 > 1:
+                    continue
+                if (not self._ellipse_filled and inner_rx > 0 and inner_ry > 0
+                        and (ds / inner_rx) ** 2 + (dp / inner_ry) ** 2 <= 1):
+                    continue
+                cells.append((p, s))
+        return cells
+
     def _stroke_cells(self, p0: int, s0: int, p1: int, s1: int):
+        if self._tool == 'ellipse':
+            return self._ellipse_cells(p0, s0, p1, s1)
         return self._arc_cells(p0, s0, p1, s1) if self._tool == 'arc' \
             else self._line_cells(p0, s0, p1, s1)
 
@@ -791,7 +820,7 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
                 self._stroke_anchor = (pixel_index, stage_index)
                 self._stroke_preview_end = (pixel_index, stage_index)
                 self.update()
-        elif self._tool in ('line', 'arc', 'gradient'):
+        elif self._tool in ('line', 'arc', 'gradient', 'ellipse'):
             self._stroke_anchor = (pixel_index, stage_index)
             self._stroke_preview_end = (pixel_index, stage_index)
             self.update()
@@ -811,7 +840,7 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
             return
         if self._tool == 'select' and self._select_anchor is not None:
             self.set_selection(self._select_anchor, stage_index)
-        elif self._tool in ('line', 'arc', 'gradient', 'bucket') and self._stroke_anchor is not None:
+        elif self._tool in ('line', 'arc', 'gradient', 'bucket', 'ellipse') and self._stroke_anchor is not None:
             self._stroke_preview_end = (pixel_index, stage_index)
             self.update()
         elif self._tool == 'freehand' and self._last_freehand is not None:
@@ -837,7 +866,7 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
             self._bucket = self._stroke_anchor = self._stroke_preview_end = None
             self._apply_bucket(bbox, self._bucket_layer(bbox, mask, ends))
             return
-        if self._tool in ('line', 'arc', 'gradient') and self._stroke_anchor is not None:
+        if self._tool in ('line', 'arc', 'gradient', 'ellipse') and self._stroke_anchor is not None:
             p0, s0 = self._stroke_anchor
             p1, s1 = self._drag_end(bool(event.modifiers() & QtCore.Qt.ShiftModifier))
             self._stroke_anchor = None
@@ -888,7 +917,19 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
             shift = bool(QtWidgets.QApplication.keyboardModifiers() & QtCore.Qt.ShiftModifier)
             p0, s0 = self._stroke_anchor
             p1, s1 = self._drag_end(shift)
-            if self._tool in ('line', 'arc'):
+            big_ellipse = (self._tool == 'ellipse'
+                           and math.pi * max(0.5, abs(s1 - s0)) * max(0.5, abs(p1 - p0)) > 4000)
+            if big_ellipse:
+                # Thousands of per-cell rects would lag while dragging - show the outline
+                # shape instead; the exact cells are painted on release.
+                preview_color = QtGui.QColor(self._paint_color)
+                preview_color.setAlpha(120)
+                center = self._cell_rect(p0, s0).center()
+                painter.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255), 1, QtCore.Qt.DashLine))
+                painter.setBrush(preview_color if self._ellipse_filled else QtCore.Qt.NoBrush)
+                painter.drawEllipse(center, max(0.5, abs(s1 - s0)) * cw, max(0.5, abs(p1 - p0)) * ch)
+                painter.setBrush(QtCore.Qt.NoBrush)
+            elif self._tool in ('line', 'arc', 'ellipse'):
                 preview_color = QtGui.QColor(self._paint_color)
                 preview_color.setAlpha(160)
                 for p, s in self._stroke_cells(p0, s0, p1, s1):
@@ -1055,6 +1096,8 @@ class GrafxSequencePreview(QtWidgets.QWidget):
         self._segment_delay = None    # ms per stage for the current segment, set at its start
         self._sound_enabled = True
         self._sound = QtMultimedia.QSoundEffect(self)
+        self._loop_sound = QtMultimedia.QSoundEffect(self)   # hum / lockup, for 'loop_sounds'
+        self._loop_sound.setLoopCount(QtMultimedia.QSoundEffect.Loop.Infinite.value)
         self._timer = QtCore.QTimer(self)
         self._timer.timeout.connect(self._tick)
         self.setMinimumSize(24, 160)
@@ -1076,6 +1119,9 @@ class GrafxSequencePreview(QtWidgets.QWidget):
         self._sound_enabled = enabled
         if not enabled:
             self._sound.stop()
+            self._loop_sound.stop()
+        elif self.is_playing():
+            self._start_loop_sound()
 
     def play(self):
         if self._segments:
@@ -1085,6 +1131,20 @@ class GrafxSequencePreview(QtWidgets.QWidget):
     def stop(self):
         self._timer.stop()
         self._sound.stop()
+        self._loop_sound.stop()
+
+    def _start_loop_sound(self):
+        """Loop the current segment's hum/lockup sound (if it has one) for as long as the
+        segment plays; stop it otherwise."""
+        segment = self._segment()
+        sounds = segment.get('loop_sounds') if segment is not None else None
+        if not (sounds and self._sound_enabled and self.is_playing()):
+            self._loop_sound.stop()
+            return
+        path, _ms = random.choice(sounds)
+        route_to_default_output(self._loop_sound)
+        self._loop_sound.setSource(QtCore.QUrl.fromLocalFile(str(path)))
+        self._loop_sound.play()
 
     def _start_segment(self, play_sound: bool = True, restart: bool = True):
         """Work out the current segment's speed and, if it has sounds, start one - a synced
@@ -1102,6 +1162,8 @@ class GrafxSequencePreview(QtWidgets.QWidget):
             self._segment_delay = segment['delay_fn'](sound_ms)
         else:
             self._segment_delay = None
+        if restart or self._stage == 0:
+            self._start_loop_sound()
         self._apply_interval()
 
     def is_playing(self) -> bool:
@@ -1315,6 +1377,7 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         tool_col.addWidget(QtWidgets.QLabel("Tool:"))
         self._tool_group = QtWidgets.QButtonGroup(self)
         for key, label in (('freehand', "Freehand"), ('line', "Line"), ('arc', "Arc"),
+                           ('ellipse', "Circle / ellipse"),
                            ('gradient', "Gradient"), ('bucket', "Bucket (fill)"),
                            ('select', "Select stages")):
             radio = QtWidgets.QRadioButton(label)
@@ -1367,11 +1430,37 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         bucket_row.addWidget(self._bucket_all_check)
         settings_col.addRow("Bucket fill:", bucket_row)
 
+        self._ellipse_filled_check = QtWidgets.QCheckBox("Filled (unticked: outline, brush-size thick)")
+        self._ellipse_filled_check.setChecked(True)
+        self._ellipse_filled_check.setToolTip(
+            "Circle / ellipse tool: press at the center and drag out. Sideways sets the "
+            "radius over time (stages), up/down along the blade (pixels); hold Shift for a "
+            "circle. Painted with the Paint color.")
+        self._ellipse_filled_check.toggled.connect(lambda checked: self._grid.set_ellipse_filled(checked))
+        settings_col.addRow("Circle / ellipse:", self._ellipse_filled_check)
+
         self._stage_count_spin = QtWidgets.QSpinBox()
         self._stage_count_spin.setRange(1, self._max_stages)
         self._stage_count_spin.setKeyboardTracking(False)
         self._stage_count_spin.valueChanged.connect(self._on_stage_count_changed)
-        settings_col.addRow(f"Stages (max {self._max_stages}):", self._stage_count_spin)
+        self._match_sound_check = QtWidgets.QCheckBox("Match sound length")
+        self._applying_match = False
+        # Starts unticked every time - ticking it resizes (and so changes) animations, which
+        # shouldn't happen just from opening the painter.
+        self._match_sound_check.toggled.connect(self._on_match_sound_toggled)
+        self._match_mode_combo = QtWidgets.QComboBox()
+        self._match_mode_combo.addItem("by adding blank stages", 'blank')
+        self._match_mode_combo.addItem("by stretching", 'stretch')
+        self._match_mode_combo.setToolTip(
+            "How Match sound length changes the stage count. Adding blank stages keeps every "
+            "painted stage as it is and adds black ones at the end to paint (or removes "
+            "stages from the end if there are too many). Stretching keeps the animation's "
+            "shape, holding each stage longer (or skipping some) so it plays slower/faster.")
+        stages_row = QtWidgets.QHBoxLayout()
+        stages_row.addWidget(self._stage_count_spin, stretch=1)
+        stages_row.addWidget(self._match_sound_check)
+        stages_row.addWidget(self._match_mode_combo)
+        settings_col.addRow(f"Stages (max {self._max_stages}):", stages_row)
 
         zoom_row = QtWidgets.QHBoxLayout()
         self._zoom_w_spin = QtWidgets.QSpinBox()
@@ -1402,7 +1491,8 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
             "drag-release to draw a straight line (Line), a curve (Arc) or a Color 1 → Color 2 "
             "gradient (Gradient - fills the selected stages, or everything; right-click picks "
             "up Color 1, Shift+right-click Color 2). Bucket fills the clicked area (within the "
-            "selected stages, if any) with the Paint color or the gradient. Hold Shift with "
+            "selected stages, if any) with the Paint color or the gradient. Circle / ellipse: "
+            "press at the center and drag out (Shift = circle). Hold Shift with "
             "Line, Gradient or a gradient Bucket drag to snap to horizontal/vertical/45°; "
             "Shift-click with Freehand "
             "draws a line from the last painted cell. Right-click picks up a cell's color. "
@@ -1628,6 +1718,7 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         self._grid.set_tool(self._tool_group.checkedButton().property('tool'))
         self._sync_bucket_options()
         self._grid.set_brush_size(self._brush_spin.value())
+        self._grid.set_ellipse_filled(self._ellipse_filled_check.isChecked())
         self._grid.set_arc_flip_h(self._flip_h_check.isChecked())
         self._grid.set_arc_flip_v(self._flip_v_check.isChecked())
 
@@ -1644,6 +1735,7 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
             self._grid.set_cell_size(self._zoom_w_spin.value(), self._zoom_h_spin.value())
         self._update_range_controls()
         self._update_undo_buttons()
+        self._update_match_sound()
         self._rebuild_sequence()
 
     def _update_warning(self):
@@ -1687,6 +1779,12 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
                 if doc is not None:
                     segment = {'label': doc.label, 'source': doc.display_image,
                                'delay_ms': doc.delay_ms, 'mode': mode}
+                    if self._timing is not None and mode == 'loop':
+                        segment['loop_sounds'] = self._timing.loop_sounds(state)
+                        if segment['loop_sounds']:
+                            segment['delay_fn'] = (
+                                lambda _ms, d=doc, st=state: self._timing.effective_delay_ms(
+                                    st, d.display_image().width(), d.delay_ms))
                     if self._timing is not None and mode == 'once':
                         segment['sounds'] = self._timing.sounds(state)
                         segment['delay_fn'] = (
@@ -1697,8 +1795,25 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
                 segments.append({'label': "(blade off)", 'source': None, 'delay_ms': None,
                                  'mode': 'off'})
         if not segments and self._doc is not None:
-            segments = [{'label': self._doc.label, 'source': self._doc.display_image,
-                         'delay_ms': self._doc.delay_ms, 'mode': 'loop'}]
+            # Just the animation being edited, over and over - with its sound: a one-shot
+            # state replays its sound each time round, a looping one keeps its hum/lockup.
+            doc = self._doc
+            segment = {'label': doc.label, 'source': doc.display_image,
+                       'delay_ms': doc.delay_ms, 'mode': 'loop'}
+            if self._timing is not None and doc.state:
+                if self._timing.sounds(doc.state):
+                    segment['mode'] = 'once'
+                    segment['sounds'] = self._timing.sounds(doc.state)
+                    segment['delay_fn'] = (
+                        lambda sound_ms, d=doc: self._timing.effective_delay_ms(
+                            d.state, d.display_image().width(), d.delay_ms, sound_ms))
+                else:
+                    segment['loop_sounds'] = self._timing.loop_sounds(doc.state)
+                    if segment['loop_sounds']:
+                        segment['delay_fn'] = (
+                            lambda _ms, d=doc: self._timing.effective_delay_ms(
+                                d.state, d.display_image().width(), d.delay_ms))
+            segments = [segment]
         playing = self._preview.is_playing()
         self._preview.set_segments(segments)
         if playing:
@@ -1883,10 +1998,77 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         self._grid.push_undo_snapshot()
         self._grid.set_stage_count(value)
 
+    # ------------------------------------------------------------------ match sound length
+
+    def _sound_matched_stages(self, doc):
+        """(stage count, explanation) that makes doc's animation last as long as its sound
+        (or qon/qoff): that duration ÷ the time each stage really takes - refreshfx when
+        synced, or the doc's delay if that's slower. (None, why not) if it can't be worked
+        out for this animation."""
+        timing = self._timing
+        if timing is None:
+            return None, "No font to match - select one in the main window (or in the Match to sound panel) first."
+        if not doc.state:
+            return None, "This animation isn't tied to a state."
+        basis = timing.basis(doc.state)
+        if basis is None:
+            return None, (f"{timing.label} has no sound to match for this state - Idle (blade "
+                          f"off) and Forever have no sound of their own.")
+        if not timing.refresh_ms:
+            return None, f"{timing.label}'s blade profile has no refreshfx."
+        per_stage = max(doc.delay_ms or 0, timing.refresh_ms)
+        raw = max(1, basis['duration_ms'] // per_stage)
+        stages = min(raw, self._max_stages)
+        if basis['source'] != 'sound':
+            source = basis['source']
+        elif doc.state in ('leds', 'lockup'):
+            source = "one loop of the shortest " + ("hum" if doc.state == 'leds' else "lockup sound")
+        else:
+            source = "the shortest sound"
+        divisor = (f"delay {doc.delay_ms} ms" if doc.delay_ms and doc.delay_ms > timing.refresh_ms
+                   else f"refreshfx {timing.refresh_ms} ms")
+        cap = f", capped at the {self._max_stages}-stage limit" if raw > stages else ""
+        return stages, (f"{source} ({basis['duration_ms']} ms) ÷ {divisor} = {raw} stages"
+                        f"{cap} ({timing.label})")
+
+    def _update_match_sound(self):
+        """Enable the box when this animation has a sound to match; if it's ticked, resize
+        the animation to match (stretched over time, as one undo step)."""
+        stages, why = self._sound_matched_stages(self._doc)
+        self._match_sound_check.setEnabled(stages is not None)
+        self._match_mode_combo.setEnabled(stages is not None)
+        self._match_sound_check.setToolTip(
+            "Resize this animation so it lasts exactly as long as its sound: " + why
+            if stages is not None else why)
+        if stages is None or not self._match_sound_check.isChecked():
+            return
+        if self._grid.stage_count() != stages:
+            self._applying_match = True
+            self._grid.push_undo_snapshot()
+            if self._match_mode_combo.currentData() == 'stretch':
+                self._grid.set_bmp_image(resample_stages(self._grid.to_bmp_image(), stages))
+            else:
+                self._grid.set_stage_count(stages)   # black stages added / removed at the end
+            self._applying_match = False
+            self._refresh_doc_labels()
+
+    def _on_match_sound_toggled(self, checked: bool):
+        if checked:
+            self._update_match_sound()
+
     def _on_grid_stage_count_changed(self, count: int):
+        # Resizing by hand (spinbox, insert/delete stages, undo) means it no longer matches.
+        if not self._applying_match and self._match_sound_check.isChecked():
+            target, _why = self._sound_matched_stages(self._doc)
+            if target is not None and count != target:
+                self._match_sound_check.blockSignals(True)
+                self._match_sound_check.setChecked(False)
+                self._match_sound_check.blockSignals(False)
         self._stage_count_spin.blockSignals(True)
         self._stage_count_spin.setValue(count)
         self._stage_count_spin.blockSignals(False)
+        self._preview._emit_status()      # its "stage N/total" counter, without waiting to play
+        self._preview.update()
         if self._auto_fit:
             self._fit_to_window()
         self._update_range_controls()
