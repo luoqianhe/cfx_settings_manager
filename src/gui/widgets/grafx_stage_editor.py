@@ -1073,6 +1073,8 @@ class _StickyMenu(QtWidgets.QMenu):
             return
         super().mouseReleaseEvent(event)
 SEQUENCE_LOOP_MS = 2500
+PREVIEW_PANEL_WIDTH = 180   # px - the painter's full-height preview column
+PREVIEW_STRIP_WIDTH = 72    # px - the blade strip inside it
 SEQUENCE_OFF_MS = 700
 
 
@@ -1306,75 +1308,22 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
             "padding: 4px;")
         layout.addWidget(self._warning_label)
 
+        # Body: tools, grid and stage buttons on the left; the preview as a full-height
+        # panel on the right. `layout` points at the left column until the nav buttons.
+        outer_layout = layout
+        body_row = QtWidgets.QHBoxLayout()
+        outer_layout.addLayout(body_row, stretch=1)
+        layout = QtWidgets.QVBoxLayout()
+        body_row.addLayout(layout, stretch=1)
+
+        # Left: tool list · middle: the color(s) the current tool paints with · right: that
+        # tool's own options, plus the always-there animation settings. Anything only one
+        # tool uses is shown only while that tool is selected (see _update_tool_ui).
         tools_row = QtWidgets.QHBoxLayout()
 
-        self._paint_container, self._color_widgets = create_rgb_picker_widget(
-            "Paint color", (255, 255, 255))
-        self._paint_container.setToolTip("Used by Freehand, Line, Arc, Bucket (Paint color), Fill All Stages and "
-                                         "the presets. Not used by the Gradient tool.")
-        r_spin, g_spin, b_spin, _swatch = self._color_widgets
-        for spin in (r_spin, g_spin, b_spin):
-            spin.valueChanged.connect(self._sync_paint_color)
-        tools_row.addWidget(self._paint_container)
-
-        gradient_box = QtWidgets.QGroupBox("Gradient")
-        gradient_col = QtWidgets.QVBoxLayout(gradient_box)
-        gradient_pickers = QtWidgets.QHBoxLayout()
-        color1_container, self._color1_widgets = create_rgb_picker_widget("Color 1", (255, 255, 255))
-        color2_container, self._color2_widgets = create_rgb_picker_widget("Color 2", (0, 0, 0))
-        for spin in self._color1_widgets[:3] + self._color2_widgets[:3]:
-            spin.valueChanged.connect(self._sync_gradient_color)
-        gradient_pickers.addWidget(color1_container)
-        gradient_pickers.addWidget(color2_container)
-        gradient_col.addLayout(gradient_pickers)
-        gradient_options = QtWidgets.QHBoxLayout()
-        swap_button = QtWidgets.QPushButton("⇄ Swap")
-        swap_button.setToolTip("Swap Color 1 and Color 2")
-        swap_button.clicked.connect(self._swap_colors)
-        gradient_options.addWidget(swap_button)
-        self._shape_combo = QtWidgets.QComboBox()
-        for key, label in (('linear', "Linear"), ('radial', "Radial (circle)"),
-                           ('elliptical', "Elliptical")):
-            self._shape_combo.addItem(label, key)
-        self._shape_combo.setToolTip(
-            "Linear: Color 1 → Color 2 along the drag. Radial: Color 1 at the center you "
-            "press, Color 2 on the circle you drag out to (round in cells: 1 stage = 1 pixel). "
-            "Elliptical: separate radii over time (stages) and along the blade (pixels); "
-            "Shift makes it a circle. For outside-in, Swap the colors.")
-        self._shape_combo.currentIndexChanged.connect(
-            lambda: self._grid.set_gradient_shape(self._shape_combo.currentData()))
-        gradient_options.addWidget(self._shape_combo)
-        self._spread_combo = QtWidgets.QComboBox()
-        for key, label in (('none', "No repeat"), ('repeat', "Repeat"),
-                           ('mirror', "Mirror (loops seamlessly)")):
-            self._spread_combo.addItem(label, key)
-        self._spread_combo.setToolTip(
-            "What happens past the end of a dragged gradient. Mirror goes 1→2→1→…, so a "
-            "pulse ends on the color it started with and loops without a jump. With Radial/"
-            "Elliptical, Repeat and Mirror make concentric rings.")
-        self._spread_combo.currentIndexChanged.connect(
-            lambda: self._grid.set_gradient_spread(self._spread_combo.currentData()))
-        gradient_options.addWidget(self._spread_combo)
-        gradient_col.addLayout(gradient_options)
-        fill_options = QtWidgets.QHBoxLayout()
-        fill_time_button = QtWidgets.QPushButton("Fill ↔ over time")
-        fill_time_button.setToolTip("Color 1 at the first stage → Color 2 at the last, over "
-                                    "the selected stages (or all of them): a fade")
-        fill_time_button.clicked.connect(lambda: self._range_op(lambda: self._grid.fill_gradient('time')))
-        fill_blade_button = QtWidgets.QPushButton("Fill ↕ hilt→tip")
-        fill_blade_button.setToolTip("Color 1 at the hilt → Color 2 at the tip, over the "
-                                     "selected stages (or all of them): a band along the blade")
-        fill_blade_button.clicked.connect(lambda: self._range_op(lambda: self._grid.fill_gradient('blade')))
-        fill_options.addWidget(fill_time_button)
-        fill_options.addWidget(fill_blade_button)
-        self._gradient_scope_label = QtWidgets.QLabel()
-        self._gradient_scope_label.setStyleSheet("color: #444444; font-size: 11px;")
-        gradient_col.addWidget(self._gradient_scope_label)
-        gradient_col.addLayout(fill_options)
-        tools_row.addWidget(gradient_box)
-
-        tool_col = QtWidgets.QVBoxLayout()
-        tool_col.addWidget(QtWidgets.QLabel("Tool:"))
+        # ---- left: tools
+        tool_box = QtWidgets.QGroupBox("Tool")
+        tool_col = QtWidgets.QVBoxLayout(tool_box)
         self._tool_group = QtWidgets.QButtonGroup(self)
         for key, label in (('freehand', "Freehand"), ('line', "Line"), ('arc', "Arc"),
                            ('ellipse', "Circle / ellipse"),
@@ -1385,25 +1334,94 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
             radio.setChecked(key == 'freehand')
             self._tool_group.addButton(radio)
             tool_col.addWidget(radio)
+        tool_col.addStretch()
         # Controls act on whichever grid is current, so they look self._grid up when used
         # (via lambdas) rather than binding to one grid at connect time.
         self._tool_group.buttonToggled.connect(
             lambda button, checked: checked and self._on_tool_changed(button.property('tool')))
-        self._flip_h_check = QtWidgets.QCheckBox("Flip arc ↔ (H)")
-        self._flip_v_check = QtWidgets.QCheckBox("Flip arc ↕ (V)")
-        self._flip_h_check.toggled.connect(lambda checked: self._grid.set_arc_flip_h(checked))
-        self._flip_v_check.toggled.connect(lambda checked: self._grid.set_arc_flip_v(checked))
-        tool_col.addWidget(self._flip_h_check)
-        tool_col.addWidget(self._flip_v_check)
-        tools_row.addLayout(tool_col)
+        tools_row.addWidget(tool_box)
 
-        settings_col = QtWidgets.QFormLayout()
+        # ---- middle: colors
+        self._colors_box = QtWidgets.QGroupBox("Paint color")
+        colors_layout = QtWidgets.QVBoxLayout(self._colors_box)
+        self._paint_container, self._color_widgets = create_rgb_picker_widget("", (255, 255, 255))
+        self._paint_container.setToolTip("Used by Freehand, Line, Arc, Circle / ellipse, the "
+                                         "Bucket's Paint color fill, Fill All Stages and the "
+                                         "presets.")
+        for spin in self._color_widgets[:3]:
+            spin.valueChanged.connect(self._sync_paint_color)
+        colors_layout.addWidget(self._paint_container)
+
+        self._gradient_colors = QtWidgets.QWidget()
+        gradient_colors_layout = QtWidgets.QVBoxLayout(self._gradient_colors)
+        gradient_colors_layout.setContentsMargins(0, 0, 0, 0)
+        gradient_pickers = QtWidgets.QHBoxLayout()
+        color1_container, self._color1_widgets = create_rgb_picker_widget("Color 1", (255, 255, 255))
+        color2_container, self._color2_widgets = create_rgb_picker_widget("Color 2", (0, 0, 0))
+        for spin in self._color1_widgets[:3] + self._color2_widgets[:3]:
+            spin.valueChanged.connect(self._sync_gradient_color)
+        gradient_pickers.addWidget(color1_container)
+        gradient_pickers.addWidget(color2_container)
+        gradient_colors_layout.addLayout(gradient_pickers)
+        swap_row = QtWidgets.QHBoxLayout()
+        swap_button = QtWidgets.QPushButton("⇄ Swap")
+        swap_button.setToolTip("Swap Color 1 and Color 2")
+        swap_button.clicked.connect(self._swap_colors)
+        swap_row.addWidget(swap_button)
+        pick_hint = QtWidgets.QLabel("Right-click: pick Color 1 · Shift+right-click: Color 2")
+        pick_hint.setStyleSheet("color: #666666; font-size: 11px;")
+        swap_row.addWidget(pick_hint)
+        swap_row.addStretch()
+        gradient_colors_layout.addLayout(swap_row)
+        colors_layout.addWidget(self._gradient_colors)
+        colors_layout.addStretch()
+        tools_row.addWidget(self._colors_box)
+
+        # ---- right: tool options (per tool) + animation settings (always)
+        right_col = QtWidgets.QVBoxLayout()
+        self._options_box = QtWidgets.QGroupBox("Tool options")
+        options_layout = QtWidgets.QVBoxLayout(self._options_box)
+        self._tool_tip_label = QtWidgets.QLabel()
+        self._tool_tip_label.setWordWrap(True)
+        self._tool_tip_label.setStyleSheet("color: #555555; font-style: italic; font-size: 11px;")
+        # Every tip fits in two lines at this width - reserving both up front keeps the
+        # box's height (and so the grid's position) the same for every tool.
+        self._options_box.setMinimumWidth(460)
+        tip_font = QtGui.QFont(self._tool_tip_label.font())
+        tip_font.setPixelSize(11)
+        self._tool_tip_label.setMinimumHeight(2 * QtGui.QFontMetrics(tip_font).lineSpacing() + 4)
+        options_layout.addWidget(self._tool_tip_label)
+        self._options = {}
+
+        def option(name, label, *widgets):
+            row = QtWidgets.QWidget()
+            row_layout = QtWidgets.QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            if label:
+                row_layout.addWidget(QtWidgets.QLabel(label))
+            for widget in widgets:
+                row_layout.addWidget(widget)
+            row_layout.addStretch()
+            options_layout.addWidget(row)
+            self._options[name] = row
+
         self._brush_spin = QtWidgets.QSpinBox()
         self._brush_spin.setRange(1, 10)
         self._brush_spin.valueChanged.connect(lambda value: self._grid.set_brush_size(value))
-        settings_col.addRow("Brush size:", self._brush_spin)
+        self._brush_label = QtWidgets.QLabel()
+        option('brush', None, self._brush_label, self._brush_spin)
 
-        bucket_row = QtWidgets.QHBoxLayout()
+        self._flip_h_check = QtWidgets.QCheckBox("Flip ↔ (H)")
+        self._flip_v_check = QtWidgets.QCheckBox("Flip ↕ (V)")
+        self._flip_h_check.toggled.connect(lambda checked: self._grid.set_arc_flip_h(checked))
+        self._flip_v_check.toggled.connect(lambda checked: self._grid.set_arc_flip_v(checked))
+        option('arc', "Curve:", self._flip_h_check, self._flip_v_check)
+
+        self._ellipse_filled_check = QtWidgets.QCheckBox("Filled (unticked: outline)")
+        self._ellipse_filled_check.setChecked(True)
+        self._ellipse_filled_check.toggled.connect(self._on_ellipse_filled_toggled)
+        option('ellipse', None, self._ellipse_filled_check)
+
         self._bucket_mode_combo = QtWidgets.QComboBox()
         self._bucket_mode_combo.addItem("Paint color", 'solid')
         self._bucket_mode_combo.addItem("Gradient (Color 1 → 2)", 'gradient')
@@ -1425,20 +1443,49 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
                                (self._bucket_tolerance_spin, 'valueChanged'),
                                (self._bucket_all_check, 'toggled')):
             getattr(widget, signal).connect(self._sync_bucket_options)
-        bucket_row.addWidget(self._bucket_mode_combo)
-        bucket_row.addWidget(self._bucket_tolerance_spin)
-        bucket_row.addWidget(self._bucket_all_check)
-        settings_col.addRow("Bucket fill:", bucket_row)
+        option('bucket_mode', "Fill with:", self._bucket_mode_combo)
+        option('bucket_match', "Tolerance:", self._bucket_tolerance_spin, self._bucket_all_check)
 
-        self._ellipse_filled_check = QtWidgets.QCheckBox("Filled (unticked: outline, brush-size thick)")
-        self._ellipse_filled_check.setChecked(True)
-        self._ellipse_filled_check.setToolTip(
-            "Circle / ellipse tool: press at the center and drag out. Sideways sets the "
-            "radius over time (stages), up/down along the blade (pixels); hold Shift for a "
-            "circle. Painted with the Paint color.")
-        self._ellipse_filled_check.toggled.connect(lambda checked: self._grid.set_ellipse_filled(checked))
-        settings_col.addRow("Circle / ellipse:", self._ellipse_filled_check)
+        self._shape_combo = QtWidgets.QComboBox()
+        for key, label in (('linear', "Linear"), ('radial', "Radial (circle)"),
+                           ('elliptical', "Elliptical")):
+            self._shape_combo.addItem(label, key)
+        self._shape_combo.setToolTip(
+            "Linear: Color 1 → Color 2 along the drag. Radial: Color 1 at the center you "
+            "press, Color 2 on the circle you drag out to (round in cells: 1 stage = 1 pixel). "
+            "Elliptical: separate radii over time (stages) and along the blade (pixels); "
+            "Shift makes it a circle. For outside-in, Swap the colors.")
+        self._shape_combo.currentIndexChanged.connect(
+            lambda: self._grid.set_gradient_shape(self._shape_combo.currentData()))
+        self._spread_combo = QtWidgets.QComboBox()
+        for key, label in (('none', "No repeat"), ('repeat', "Repeat"),
+                           ('mirror', "Mirror (loops seamlessly)")):
+            self._spread_combo.addItem(label, key)
+        self._spread_combo.setToolTip(
+            "What happens past the end of a dragged gradient. Mirror goes 1→2→1→…, so a "
+            "pulse ends on the color it started with and loops without a jump. With Radial/"
+            "Elliptical, Repeat and Mirror make concentric rings.")
+        self._spread_combo.currentIndexChanged.connect(
+            lambda: self._grid.set_gradient_spread(self._spread_combo.currentData()))
+        option('gradient_shape', "Shape:", self._shape_combo, self._spread_combo)
 
+        fill_time_button = QtWidgets.QPushButton("Fill ↔ over time")
+        fill_time_button.setToolTip("Color 1 at the first stage → Color 2 at the last, over "
+                                    "the selected stages (or all of them): a fade")
+        fill_time_button.clicked.connect(lambda: self._range_op(lambda: self._grid.fill_gradient('time')))
+        fill_blade_button = QtWidgets.QPushButton("Fill ↕ hilt→tip")
+        fill_blade_button.setToolTip("Color 1 at the hilt → Color 2 at the tip, over the "
+                                     "selected stages (or all of them): a band along the blade")
+        fill_blade_button.clicked.connect(lambda: self._range_op(lambda: self._grid.fill_gradient('blade')))
+        option('gradient_fill', None, fill_time_button, fill_blade_button)
+        self._gradient_scope_label = QtWidgets.QLabel()
+        self._gradient_scope_label.setStyleSheet("color: #444444; font-size: 11px;")
+        option('gradient_scope', None, self._gradient_scope_label)
+        options_layout.addStretch()
+        right_col.addWidget(self._options_box)
+
+        animation_box = QtWidgets.QGroupBox("Animation")
+        animation_form = QtWidgets.QFormLayout(animation_box)
         self._stage_count_spin = QtWidgets.QSpinBox()
         self._stage_count_spin.setRange(1, self._max_stages)
         self._stage_count_spin.setKeyboardTracking(False)
@@ -1456,11 +1503,12 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
             "painted stage as it is and adds black ones at the end to paint (or removes "
             "stages from the end if there are too many). Stretching keeps the animation's "
             "shape, holding each stage longer (or skipping some) so it plays slower/faster.")
-        stages_row = QtWidgets.QHBoxLayout()
-        stages_row.addWidget(self._stage_count_spin, stretch=1)
-        stages_row.addWidget(self._match_sound_check)
-        stages_row.addWidget(self._match_mode_combo)
-        settings_col.addRow(f"Stages (max {self._max_stages}):", stages_row)
+        animation_form.addRow(f"Stages (max {self._max_stages}):", self._stage_count_spin)
+        match_row = QtWidgets.QHBoxLayout()
+        match_row.addWidget(self._match_sound_check)
+        match_row.addWidget(self._match_mode_combo)
+        match_row.addStretch()
+        animation_form.addRow("", match_row)
 
         zoom_row = QtWidgets.QHBoxLayout()
         self._zoom_w_spin = QtWidgets.QSpinBox()
@@ -1479,28 +1527,20 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         zoom_row.addWidget(self._zoom_h_spin)
         zoom_row.addWidget(fit_button)
         zoom_row.addStretch()
-        settings_col.addRow("Zoom (cell px):", zoom_row)
-        tools_row.addLayout(settings_col)
-
+        animation_form.addRow("Zoom (cell px):", zoom_row)
+        right_col.addWidget(animation_box)
+        tools_row.addLayout(right_col)
         tools_row.addStretch()
-        layout.addLayout(tools_row)
+
+        self._tools_area = QtWidgets.QWidget()
+        self._tools_area.setLayout(tools_row)
+        tools_row.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._tools_area)
 
         hint = QtWidgets.QLabel(
-            "Rows are blade pixels (top = tip, bottom = hilt), columns are animation stages "
-            "(left = stage 1, played first). Left-click/drag to paint (Freehand), or click-"
-            "drag-release to draw a straight line (Line), a curve (Arc) or a Color 1 → Color 2 "
-            "gradient (Gradient - fills the selected stages, or everything; right-click picks "
-            "up Color 1, Shift+right-click Color 2). Bucket fills the clicked area (within the "
-            "selected stages, if any) with the Paint color or the gradient. Circle / ellipse: "
-            "press at the center and drag out (Shift = circle). Hold Shift with "
-            "Line, Gradient or a gradient Bucket drag to snap to horizontal/vertical/45°; "
-            "Shift-click with Freehand "
-            "draws a line from the last painted cell. Right-click picks up a cell's color. "
-            "With Select stages, drag across columns (Shift-click to extend) and use the stage "
-            "buttons below; Esc or Select None clears the selection. Ctrl+Z / Ctrl+Shift+Z "
-            "undo and redo. With the Arc tool, press H or V (or the checkboxes) to flip which "
-            "way the curve bows."
-        )
+            "Rows are blade pixels (top = tip, bottom = hilt); columns are stages (left = "
+            "stage 1, played first). Right-click picks up a cell's color. Ctrl+Z / Ctrl+Shift+Z "
+            "undo and redo.")
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #666666; font-style: italic; font-size: 11px;")
         layout.addWidget(hint)
@@ -1508,16 +1548,16 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         self._scroll = QtWidgets.QScrollArea()
         self._scroll.setWidgetResizable(False)
 
-        preview_col = QtWidgets.QVBoxLayout()
-        preview_title = QtWidgets.QLabel("Preview")
-        preview_title.setStyleSheet("font-weight: bold;")
-        preview_col.addWidget(preview_title, alignment=QtCore.Qt.AlignHCenter)
+        preview_panel = QtWidgets.QGroupBox("Preview")
+        preview_panel.setFixedWidth(PREVIEW_PANEL_WIDTH)
+        preview_col = QtWidgets.QVBoxLayout(preview_panel)
         self._preview = GrafxSequencePreview()
+        self._preview.setFixedWidth(PREVIEW_STRIP_WIDTH)
         preview_col.addWidget(self._preview, stretch=1, alignment=QtCore.Qt.AlignHCenter)
         self._preview_status = QtWidgets.QLabel("")
         self._preview_status.setAlignment(QtCore.Qt.AlignHCenter)
         self._preview_status.setWordWrap(True)
-        self._preview_status.setFixedWidth(96)
+        self._preview_status.setFixedWidth(PREVIEW_PANEL_WIDTH - 24)
         self._preview_status.setStyleSheet("font-size: 10px; color: #444444;")
         self._preview.status_changed.connect(self._preview_status.setText)
         preview_col.addWidget(self._preview_status, alignment=QtCore.Qt.AlignHCenter)
@@ -1569,10 +1609,7 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         self._sound_check.toggled.connect(self._preview.set_sound_enabled)
         preview_col.addWidget(self._sound_check)
 
-        grid_row = QtWidgets.QHBoxLayout()
-        grid_row.addWidget(self._scroll, stretch=1)
-        grid_row.addLayout(preview_col)
-        layout.addLayout(grid_row, stretch=1)
+        layout.addWidget(self._scroll, stretch=1)
 
         self._status_label = QtWidgets.QLabel("")
         self._status_label.setStyleSheet("color: #444444; font-size: 11px;")
@@ -1655,6 +1692,9 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         mgmt_row.addStretch()
         layout.addLayout(mgmt_row)
 
+        body_row.addWidget(preview_panel)
+        layout = outer_layout
+
         nav_row = QtWidgets.QHBoxLayout()
         nav_row.addStretch()
         cancel_button = QtWidgets.QPushButton("Cancel")
@@ -1666,6 +1706,22 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
             nav_row.addWidget(button)
         layout.addLayout(nav_row)
 
+        # Size the color and option boxes for their fullest contents (both gradient pickers;
+        # the tip plus the most option rows any tool shows - 3, for a gradient Bucket fill),
+        # so switching tools never resizes them and the grid below never jumps.
+        self._gradient_colors.setVisible(True)
+        self._paint_container.setVisible(False)
+        self._colors_box.setMinimumHeight(self._colors_box.sizeHint().height())
+        self._colors_box.setMinimumWidth(self._colors_box.sizeHint().width())
+        bucket = next(b for b in self._tool_group.buttons() if b.property('tool') == 'bucket')
+        bucket.setChecked(True)
+        self._bucket_mode_combo.setCurrentIndex(self._bucket_mode_combo.findData('gradient'))
+        self._update_tool_ui()                      # the most option rows any tool shows
+        self._options_box.layout().invalidate()     # drop the size cached for the last tool
+        self._options_box.setMinimumHeight(self._options_box.layout().totalSizeHint().height())
+        self._bucket_mode_combo.setCurrentIndex(0)
+        self._tool_group.buttons()[0].setChecked(True)
+        self._update_tool_ui()
         self._auto_fit = True
         start = next((i for i, d in enumerate(self._documents) if d.key == current_key), 0)
         self._doc_combo.blockSignals(True)
@@ -1919,16 +1975,64 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         return tool == 'gradient' or (tool == 'bucket'
                                       and self._bucket_mode_combo.currentData() == 'gradient')
 
+    TOOL_TIPS = {
+        'freehand': "Click or drag to paint. Shift-click draws a straight line from the last "
+                    "painted cell.",
+        'line': "Click, drag and release for a straight line. Hold Shift to snap to "
+                "horizontal / vertical / 45°.",
+        'arc': "Click, drag and release for a curve. H / V (or the boxes below) flip which way "
+               "it bows.",
+        'ellipse': "Press at the center and drag out: sideways = over time, up/down = along "
+                   "the blade. Hold Shift for a circle.",
+        'gradient': "Drag to set the direction (Radial / Elliptical: from the center out; "
+                    "Shift snaps). Fills the selected stages, or everything.",
+        'bucket': "Click to fill the connected area of that color, inside the selected stages "
+                  "if any. Gradient fill: drag from the clicked cell to set its direction.",
+        'select': "Drag across columns to select stages (Shift-click extends), then use the "
+                  "stage buttons below the grid. Esc clears the selection.",
+    }
+
+    def _current_tool(self) -> str:
+        return self._tool_group.checkedButton().property('tool')
+
+    def _update_tool_ui(self):
+        """Show only the colors and options the current tool uses."""
+        tool = self._current_tool()
+        gradient_colors = self._uses_gradient_colors()
+        self._paint_container.setVisible(not gradient_colors)
+        self._gradient_colors.setVisible(gradient_colors)
+        self._colors_box.setTitle("Gradient colors" if gradient_colors else "Paint color")
+        outline = tool == 'ellipse' and not self._ellipse_filled_check.isChecked()
+        self._brush_label.setText("Outline thickness:" if outline else "Brush size:")
+        visible = {
+            'brush': tool in ('freehand', 'line', 'arc') or outline,
+            'arc': tool == 'arc',
+            'ellipse': tool == 'ellipse',
+            'bucket_mode': tool == 'bucket',
+            'bucket_match': tool == 'bucket',
+            'gradient_shape': gradient_colors,
+            'gradient_fill': tool == 'gradient',
+            'gradient_scope': tool == 'gradient',
+        }
+        for name, row in self._options.items():
+            row.setVisible(visible.get(name, False))
+        self._tool_tip_label.setText(self.TOOL_TIPS.get(tool, ""))
+
     def _on_tool_changed(self, tool: str):
-        self._grid.set_tool(tool)
-        self._paint_container.setEnabled(not self._uses_gradient_colors())
+        if self._grid is not None:      # None while the window is still being built
+            self._grid.set_tool(tool)
+        self._update_tool_ui()
+
+    def _on_ellipse_filled_toggled(self, checked: bool):
+        self._grid.set_ellipse_filled(checked)
+        self._update_tool_ui()
 
     def _sync_bucket_options(self, *_args):
         if self._grid is not None:
             self._grid.set_bucket_options(self._bucket_tolerance_spin.value(),
                                           self._bucket_all_check.isChecked(),
                                           self._bucket_mode_combo.currentData())
-        self._paint_container.setEnabled(not self._uses_gradient_colors())
+        self._update_tool_ui()
 
     def _sync_paint_color(self):
         if self._grid is not None:
