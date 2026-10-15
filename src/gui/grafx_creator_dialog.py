@@ -655,11 +655,16 @@ class GrafxCreatorDialog(QtWidgets.QDialog):
                         f"to Custom when you click Done (one variant).")
             image = self._generate_image(state, seed=1)
             delay_ms = None if widgets['sync_check'].isChecked() else widgets['delay_spin'].value()
+            advanced = widgets['section_editor'].values()   # accents=, accpulsed, ...
             documents.append(PainterDocument(state, label, image, state=state,
-                                             delay_ms=delay_ms, note=note))
+                                             delay_ms=delay_ms, note=note,
+                                             accents=advanced.pop('accents', None),
+                                             params=advanced))
         dialog = GrafxPixelEditorWindow(parent=self, documents=documents,
                                         current_key=start_state or states[0],
-                                        timing=self._painter_timing(start_state))
+                                        timing=self._painter_timing(start_state),
+                                        commit_handler=getattr(self.main_window,
+                                                               'apply_blade_profile_params', None))
         if dialog.exec() != QtWidgets.QDialog.Accepted:
             return
         for doc in dialog.modified_documents():

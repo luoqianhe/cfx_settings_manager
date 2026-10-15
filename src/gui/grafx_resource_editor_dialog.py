@@ -523,7 +523,8 @@ class GrafxResourceEditorDialog(QtWidgets.QDialog):
             documents.append(PainterDocument(
                 e.path.name, f"{STATE_INFO.get(e.state, (e.state,))[0]} - {e.path.name}",
                 image, state=e.state, delay_ms=delay_ms if delay_ms > 0 else None,
-                warning=self._mismatch_text(image.width(), settings) or None))
+                warning=self._mismatch_text(image.width(), settings) or None,
+                accents=(settings or {}).get('accents'), params=settings or {}))
         if not any(doc.key == entry.path.name for doc in documents):
             QtWidgets.QMessageBox.warning(self, "Can't Open", f"Couldn't read {entry.path.name}.")
             return
@@ -534,7 +535,8 @@ class GrafxResourceEditorDialog(QtWidgets.QDialog):
             max_stages=MAX_RESOURCE_STAGES, title=f"Edit GraFx Resource - {folder.name}",
             accept_buttons=[("Save as New Variant", 'variant'), ("Save", 'save')],
             timing=self._sound_panel.timing() if self._sound_panel is not None
-            else self._fallback_timing())
+            else self._fallback_timing(),
+            commit_handler=getattr(self.main_window, 'apply_blade_profile_params', None))
         accepted = dialog.exec() == QtWidgets.QDialog.Accepted
         if self.preview_button.text() == "Pause":
             self.preview.play()

@@ -1161,6 +1161,52 @@ class MainWindow(QtWidgets.QMainWindow):
 
         return report
 
+    def apply_blade_profile_params(self, font_path, params: dict):
+        """Put params (e.g. SwingBright settings chosen in the GraFx painter's preview) into
+        the settings grid for font_path - highlighted as changed, written to disk only by
+        Save Changes, like any other edit. Only possible while that font is the one shown.
+        Returns (ok, message)."""
+        font_path = Path(font_path)
+        if self.current_font_path is None or Path(self.current_font_path) != font_path:
+            return False, (f"Select {font_path.name} in the main window's font list first - "
+                           f"its settings need to be on screen to change them.")
+        failed = [name for name, value in params.items()
+                  if not self.settings_grid.set_parameter_value(name, value)]
+        if failed:
+            return False, (f"These aren't shown for {font_path.name}, so they couldn't be set: "
+                           f"{', '.join(failed)}. Add them to its blade profile first.")
+        sources = {self.settings_grid.param_sources.get(name, 'font') for name in params}
+        where = []
+        if 'blade' in sources:
+            try:
+                profile = int(str(self.settings_grid.get_current_settings()
+                                  .get('start_blade', '')).split()[0])
+                shared = [path.name for path in self._fonts_using_profile(profile)
+                          if path != font_path]
+                where.append(f"blade profile {profile}" + (
+                    f" (also used by: {', '.join(shared)})" if shared else ""))
+            except (ValueError, IndexError):
+                where.append("its blade profile")
+        if 'font' in sources:
+            where.append("its font_config.txt (it overrides the blade profile there)")
+        settings = ", ".join(f"{k}={v}" for k, v in params.items())
+        return True, (f"Set {settings} for {font_path.name} in {' and '.join(where)}. "
+                      f"Nothing is written yet - review the highlighted values in the main "
+                      f"window and click Save Changes.")
+
+    def _fonts_using_profile(self, profile_num: int):
+        """Every font folder whose effective blade profile (start_blade, or prefs.txt when
+        that's -1) is profile_num - the same resolution the font list's shared-profile
+        highlighting uses."""
+        prefs = self.file_handler.load_preferences()
+        fonts = []
+        for font_num, _font_name, path in self.file_handler.load_font_folders():
+            settings = self.file_handler.load_font_config(path) or {}
+            profile, _color = self._resolve_effective_profile_and_color(settings, font_num, prefs)
+            if str(profile) == str(profile_num):
+                fonts.append(Path(path))
+        return fonts
+
     def font_timing(self, font_path):
         """core.grafx_timing.FontTiming for a font: its sounds plus its effective settings
         (global -> blade profile -> color -> font_config.txt). The currently selected font

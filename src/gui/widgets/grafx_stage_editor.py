@@ -26,6 +26,7 @@ from PySide6 import QtCore, QtGui, QtMultimedia, QtWidgets
 
 from core import grafx_writer
 from core.grafx_timing import resample_stages
+from core.grafx_sim import FrameSimulator
 from core.sound_player import route_to_default_output
 from gui.widgets.widget_factory import create_rgb_picker_widget
 
@@ -133,6 +134,8 @@ TAN_22_5 = math.tan(math.radians(22.5))
 GRADIENT_SHAPES = ('linear', 'radial', 'elliptical')
 
 GRADIENT_SPREADS = {
+    'stop': QtGui.QGradient.PadSpread,      # only between the ends / inside the shape -
+                                            # everything beyond is left as it was
     'none': QtGui.QGradient.PadSpread,      # Color 1 before the start, Color 2 past the end
     'repeat': QtGui.QGradient.RepeatSpread,  # 1->2, 1->2, ...
     'mirror': QtGui.QGradient.ReflectSpread,  # 1->2->1->2 - loops seamlessly
@@ -233,7 +236,7 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
         self._last_painted = None        # last freehand cell, kept for Shift-click lines
         self._gradient_start_color = QtGui.QColor(255, 255, 255)   # gradient Color 1
         self._gradient_color = QtGui.QColor(0, 0, 0)                # gradient Color 2
-        self._gradient_spread = 'none'
+        self._gradient_spread = 'stop'
         self._gradient_shape = 'linear'  # 'linear', 'radial' (circle) or 'elliptical'
         self._bucket_tolerance = 0       # max per-channel difference still counted as a match
         self._bucket_replace_all = False  # every matching cell, not just the connected area
@@ -296,7 +299,7 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
         self.update()
 
     def set_gradient_spread(self, spread: str):
-        self._gradient_spread = spread if spread in GRADIENT_SPREADS else 'none'
+        self._gradient_spread = spread if spread in GRADIENT_SPREADS else 'stop'
         self.update()
 
     def set_arc_flip_h(self, flag: bool):
@@ -576,15 +579,61 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
         painter.end()
         return image
 
-    def _apply_gradient(self, p0, s0, p1, s1, shape: str = None) -> bool:
-        region = self._gradient_region()
+    def _gradient_mask(self, region: QtCore.QRect, p0, s0, p1, s1, shape: str) -> QtGui.QImage:
+        """Region-sized mask, opaque on the cells a 'stop at the ends' gradient paints:
+        linear - the band between the start and end cells (perpendicular to the drag);
+        radial/elliptical - inside the circle/ellipse. Cell centers decide (no antialiasing),
+        so the end/rim cells - which get Color 1/Color 2 exactly - are included."""
+        top = self.pixel_count() - 1
+        x0, y0 = s0 + 0.5 - region.x(), top - p0 + 0.5 - region.y()
+        x1, y1 = s1 + 0.5 - region.x(), top - p1 + 0.5 - region.y()
+        mask = QtGui.QImage(region.size(), QtGui.QImage.Format_ARGB32)
+        mask.fill(QtCore.Qt.transparent)
+        painter = QtGui.QPainter(mask)
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(QtGui.QColor(255, 255, 255))
+        if shape == 'linear':
+            length = math.hypot(x1 - x0, y1 - y0)
+            ux, uy = (x1 - x0) / length, (y1 - y0) / length       # along the drag
+            nx, ny = -uy * 100000, ux * 100000                    # across it, "infinitely"
+            ax, ay = x0 - ux * 0.5, y0 - uy * 0.5                 # half a cell beyond each end
+            bx, by = x1 + ux * 0.5, y1 + uy * 0.5
+            painter.drawPolygon(QtGui.QPolygonF([
+                QtCore.QPointF(ax + nx, ay + ny), QtCore.QPointF(ax - nx, ay - ny),
+                QtCore.QPointF(bx - nx, by - ny), QtCore.QPointF(bx + nx, by + ny)]))
+        else:
+            rx, ry = self._radii(p0, s0, p1, s1, shape)
+            painter.drawEllipse(QtCore.QPointF(x0, y0), rx + 0.5, ry + 0.5)
+        painter.end()
+        return mask
+
+    def _gradient_layer(self, region: QtCore.QRect, p0, s0, p1, s1, shape: str = None,
+                        clip: bool = None):
+        """The gradient as a region-sized ARGB layer to draw over the grid. With 'Stop at
+        the ends' it's transparent beyond the ends / outside the shape, so earlier work
+        there (another gradient, say) is kept. None for a zero-length drag."""
         image = self._gradient_image(region, p0, s0, p1, s1, shape)
         if image is None:
+            return None
+        layer = image.convertToFormat(QtGui.QImage.Format_ARGB32)
+        if clip is None:
+            clip = self._gradient_spread == 'stop'
+        if clip:
+            painter = QtGui.QPainter(layer)
+            painter.setCompositionMode(QtGui.QPainter.CompositionMode_DestinationIn)
+            painter.drawImage(0, 0, self._gradient_mask(region, p0, s0, p1, s1,
+                                                        shape or self._gradient_shape))
+            painter.end()
+        return layer
+
+    def _apply_gradient(self, p0, s0, p1, s1, shape: str = None, clip: bool = None) -> bool:
+        region = self._gradient_region()
+        layer = self._gradient_layer(region, p0, s0, p1, s1, shape, clip)
+        if layer is None:
             return False
         self.push_undo_snapshot()
         painter = QtGui.QPainter(self._image)
-        painter.setCompositionMode(QtGui.QPainter.CompositionMode_Source)
-        painter.drawImage(region.topLeft(), image)
+        painter.drawImage(region.topLeft(), layer)
         painter.end()
         self.update()
         self.cell_painted.emit()
@@ -597,8 +646,9 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
         region = self._gradient_region()
         first, last = region.left(), region.right()
         if direction == 'time':
-            return self._apply_gradient(0, first, 0, last, shape='linear')
-        return self._apply_gradient(0, first, self.pixel_count() - 1, first, shape='linear')
+            return self._apply_gradient(0, first, 0, last, shape='linear', clip=False)
+        return self._apply_gradient(0, first, self.pixel_count() - 1, first, shape='linear',
+                                    clip=False)
 
     # ------------------------------------------------------------------ paint bucket
 
@@ -944,7 +994,7 @@ class GrafxPixelGridWidget(QtWidgets.QWidget):
                                             and (p0, s0) != (p1, s1)):
                 if self._tool == 'gradient':
                     region = self._gradient_region()
-                    image = self._gradient_image(region, p0, s0, p1, s1)
+                    image = self._gradient_layer(region, p0, s0, p1, s1)
                     if image is not None:
                         painter.drawImage(QtCore.QRect(region.x() * cw, region.y() * ch,
                                                        region.width() * cw, region.height() * ch),
@@ -1026,7 +1076,10 @@ class PainterDocument:
     time it's shown and then kept, so switching away and back preserves everything."""
 
     def __init__(self, key, label: str, bmp_image: QtGui.QImage, state: str = None,
-                 delay_ms: int = None, note: str = None, warning: str = None):
+                 delay_ms: int = None, note: str = None, warning: str = None,
+                 accents: str = None, params: dict = None):
+        self.accents = accents        # the section's accents= string, for the simulation
+        self.params = params or {}    # its other params (accpulsed, accpulsel, ...)
         self.key = key
         self.label = label
         self.state = state            # grafx_reader.GRAFX_STATES key, for the sequence preview
@@ -1102,6 +1155,18 @@ class GrafxSequencePreview(QtWidgets.QWidget):
         self._loop_sound.setLoopCount(QtMultimedia.QSoundEffect.Loop.Infinite.value)
         self._timer = QtCore.QTimer(self)
         self._timer.timeout.connect(self._tick)
+        # Simulation (accents= attributes, SwingBright): redrawn on its own ~40 fps clock,
+        # since pulsing / morphing / a swing change between the stage ticks too.
+        self.simulator = None             # core.grafx_sim.FrameSimulator, or None = plain BMP
+        self.simulate = True
+        self._frame_timer = QtCore.QTimer(self)
+        self._frame_timer.setInterval(25)
+        self._frame_timer.timeout.connect(self._frame)
+        self._clock = QtCore.QElapsedTimer()
+        self._clock.start()
+        self._stage_clock = QtCore.QElapsedTimer()
+        self._stage_clock.start()
+        self._last_frame_ms = 0
         self.setMinimumSize(24, 160)
         self.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
         self.setFixedWidth(36)
@@ -1128,12 +1193,26 @@ class GrafxSequencePreview(QtWidgets.QWidget):
     def play(self):
         if self._segments:
             self._timer.start()
+            self._frame_timer.start()
+            self._stage_clock.restart()
             self._start_segment(play_sound=True, restart=False)
 
     def stop(self):
         self._timer.stop()
+        self._frame_timer.stop()
         self._sound.stop()
         self._loop_sound.stop()
+
+    def _frame(self):
+        now = self._clock.elapsed()
+        if self.simulator is not None:
+            self.simulator.step(now - self._last_frame_ms)
+        self._last_frame_ms = now
+        self.update()
+
+    def refresh(self):
+        """Redraw now (e.g. a swing while paused), advancing the simulation's smoothing."""
+        self._frame()
 
     def _start_loop_sound(self):
         """Loop the current segment's hum/lockup sound (if it has one) for as long as the
@@ -1203,6 +1282,7 @@ class GrafxSequencePreview(QtWidgets.QWidget):
             image = self._image(segment)
             count = image.width() if image is not None else 1
             self._stage += 1
+            self._stage_clock.restart()
             if segment['mode'] == 'once':
                 if self._stage >= count:
                     self._advance()
@@ -1231,14 +1311,43 @@ class GrafxSequencePreview(QtWidgets.QWidget):
             self.status_changed.emit(
                 f"{segment['label']}\n{min(self._stage, image.width() - 1) + 1}/{image.width()}")
 
+    def _simulated_column(self, segment, image, stage):
+        """This stage's pixel colors (index 0 = hilt) as the simulator renders them, or
+        None to draw the BMP column as is."""
+        sim = self.simulator
+        if sim is None or not self.simulate:
+            return None
+        swingbright = segment.get('swingbright', False)
+        if not segment.get('accents') and not (swingbright and sim.swingbright().active):
+            return None
+        height = image.height()
+        following = stage + 1 if stage + 1 < image.width() else (0 if segment['mode'] == 'loop' else stage)
+        column = lambda x: [QtGui.QColor(image.pixel(x, height - 1 - i)).getRgb()[:3]
+                            for i in range(height)]
+        delay = self._delay(segment)
+        progress = min(1.0, self._stage_clock.elapsed() / delay) if self.is_playing() else 0.0
+        return sim.render(column(stage), column(following), progress, segment.get('accents'),
+                          segment.get('params'), self._clock.elapsed(),
+                          stage_key=(id(segment), stage), swingbright=swingbright)
+
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
         painter.fillRect(self.rect(), QtGui.QColor(20, 20, 20))
-        image = self._image(self._segment())
+        segment = self._segment()
+        image = self._image(segment)
         if image is not None:
             stage = min(self._stage, image.width() - 1)
-            painter.drawImage(self.rect().adjusted(4, 4, -4, -4), image,
-                              QtCore.QRect(stage, 0, 1, image.height()))
+            target = self.rect().adjusted(4, 4, -4, -4)
+            colors = self._simulated_column(segment, image, stage)
+            if colors is None:
+                painter.drawImage(target, image, QtCore.QRect(stage, 0, 1, image.height()))
+            else:
+                count = len(colors)
+                for i, rgb in enumerate(colors):              # i = 0 at the hilt (bottom)
+                    y0 = target.bottom() + 1 - round((i + 1) * target.height() / count)
+                    y1 = target.bottom() + 1 - round(i * target.height() / count)
+                    painter.fillRect(QtCore.QRect(target.left(), y0, target.width(), y1 - y0),
+                                     QtGui.QColor(*rgb))
         painter.setPen(QtGui.QColor(90, 90, 90))
         painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
 
@@ -1259,7 +1368,7 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
                  bmp_image: QtGui.QImage = None, max_stages: int = MAX_STAGE_COUNT,
                  title: str = "Paint GraFx Stages", accept_buttons=None,
                  warning: str = None, preview_delay_ms: int = None, subject: str = None,
-                 documents=None, current_key=None, timing=None):
+                 documents=None, current_key=None, timing=None, commit_handler=None):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.chosen_action = None
@@ -1275,6 +1384,9 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         self._documents = list(documents)
         self._building_preview_menu = True     # don't save/rebuild while setting up
         self._timing = timing   # core.grafx_timing.FontTiming: sounds + refreshfx, or None
+        # callable(font_path, {param: value}) -> (ok, message): puts settings tried in the
+        # preview into the main window's settings grid for that font (see Commit).
+        self._commit_handler = commit_handler
         self._max_stages = max([max_stages] + [d.display_image().width() for d in self._documents])
         self._doc = None
         self._grid = None
@@ -1458,13 +1570,16 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         self._shape_combo.currentIndexChanged.connect(
             lambda: self._grid.set_gradient_shape(self._shape_combo.currentData()))
         self._spread_combo = QtWidgets.QComboBox()
-        for key, label in (('none', "No repeat"), ('repeat', "Repeat"),
-                           ('mirror', "Mirror (loops seamlessly)")):
+        for key, label in (('stop', "Stop at the ends"), ('none', "Extend end colors"),
+                           ('repeat', "Repeat"), ('mirror', "Mirror (loops seamlessly)")):
             self._spread_combo.addItem(label, key)
         self._spread_combo.setToolTip(
-            "What happens past the end of a dragged gradient. Mirror goes 1→2→1→…, so a "
-            "pulse ends on the color it started with and loops without a jump. With Radial/"
-            "Elliptical, Repeat and Mirror make concentric rings.")
+            "What happens past the ends of a dragged gradient. Stop at the ends: paints only "
+            "between them (Radial / Elliptical: inside the shape) and leaves everything else "
+            "as it was - so several gradients can sit side by side. Extend end colors: Color 1 "
+            "before the start, Color 2 after the end, across the whole area. Repeat / Mirror: "
+            "keep going 1→2→1→… (rings with Radial / Elliptical); Mirror loops without a jump. "
+            "(A gradient Bucket fill always fills its whole area.)")
         self._spread_combo.currentIndexChanged.connect(
             lambda: self._grid.set_gradient_spread(self._spread_combo.currentData()))
         option('gradient_shape', "Shape:", self._shape_combo, self._spread_combo)
@@ -1608,6 +1723,69 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
             f"way the board would play them" if timing is not None else "")
         self._sound_check.toggled.connect(self._preview.set_sound_enabled)
         preview_col.addWidget(self._sound_check)
+
+        # Simulated swing: drives SwingBright and audio-reactive (@ # * $) pixels.
+        self._simulator = FrameSimulator(timing.settings if timing is not None else None)
+        self._preview.simulator = self._simulator
+        sim_box = QtWidgets.QGroupBox("Simulate")
+        sim_layout = QtWidgets.QVBoxLayout(sim_box)
+        sim_layout.setContentsMargins(6, 6, 6, 6)
+        self._simulate_check = QtWidgets.QCheckBox("Pixel effects")
+        self._simulate_check.setChecked(True)
+        self._simulate_check.setToolTip(
+            "Show accents= attributes (morphing, random, pulsing, audio-reactive) and "
+            "SwingBright as the board would - approximately. Untick to see the raw BMP.")
+        self._simulate_check.toggled.connect(self._on_simulate_toggled)
+        sim_layout.addWidget(self._simulate_check)
+        self._swing_label = QtWidgets.QLabel()
+        self._swing_label.setStyleSheet("font-size: 11px;")
+        sim_layout.addWidget(self._swing_label)
+        self._swing_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self._swing_slider.setRange(0, 800)
+        self._swing_slider.setToolTip(
+            "Simulated swing speed, in the same units as mapping_move. Also makes the "
+            "simulated sound louder, for audio-reactive pixels.")
+        self._swing_slider.valueChanged.connect(self._on_swing_changed)
+        sim_layout.addWidget(self._swing_slider)
+        swing_button = QtWidgets.QPushButton("Swing!")
+        swing_button.setToolTip("One quick swing: speeds up and settles back to rest")
+        swing_button.clicked.connect(self._swing_once)
+        sim_layout.addWidget(swing_button)
+        self._swing_animation = QtCore.QVariantAnimation(self)
+        self._swing_animation.setDuration(900)
+        self._swing_animation.setKeyValueAt(0.0, 0)
+        self._swing_animation.setKeyValueAt(0.3, 600)
+        self._swing_animation.setKeyValueAt(1.0, 0)
+        self._swing_animation.valueChanged.connect(lambda v: self._swing_slider.setValue(int(v)))
+        self._sbright_combo = QtWidgets.QComboBox()
+        self._sbright_combo.addItem("Profile's settings", None)
+        self._sbright_combo.addItem("Try: color on swing", {'mapping_sbright': 3, 'style_sbright': 0})
+        self._sbright_combo.addItem("Try: GraFx on swing", {'mapping_sbright': 3, 'style_sbright': 1})
+        self._sbright_combo.setToolTip(
+            "Preview only - doesn't change any setting. 'As profile' uses the blade "
+            "profile's SwingBright settings; the 'Try' options preview motion-controlled "
+            "SwingBright (mapping_sbright=3) with style_sbright 0 (animation fades to the "
+            "blade color as you swing) or 1 (plain blade color, animation fades in as you "
+            "swing). Only affects Idle (lit).")
+        self._sbright_combo.currentIndexChanged.connect(self._on_sbright_changed)
+        sbright_title = QtWidgets.QLabel("SwingBright:")
+        sbright_title.setStyleSheet("font-size: 11px;")
+        sim_layout.addWidget(sbright_title)
+        sim_layout.addWidget(self._sbright_combo)
+        self._sbright_commit = QtWidgets.QPushButton("Commit to profile")
+        self._sbright_commit.setToolTip(
+            "Use the SwingBright option you're trying for real: sets mapping_sbright=3 and "
+            "the matching style_sbright for this font in the main window's settings (then "
+            "click Save Changes there to write config.txt).")
+        self._sbright_commit.clicked.connect(self._commit_sbright)
+        sim_layout.addWidget(self._sbright_commit)
+        self._sbright_label = QtWidgets.QLabel()
+        self._sbright_label.setWordWrap(True)
+        self._sbright_label.setStyleSheet("font-size: 10px; color: #555555;")
+        sim_layout.addWidget(self._sbright_label)
+        preview_col.addWidget(sim_box)
+        self._on_swing_changed(0)
+        self._on_sbright_changed()
 
         layout.addWidget(self._scroll, stretch=1)
 
@@ -1834,7 +2012,9 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
                 doc = self._document_for_state(state)
                 if doc is not None:
                     segment = {'label': doc.label, 'source': doc.display_image,
-                               'delay_ms': doc.delay_ms, 'mode': mode}
+                               'delay_ms': doc.delay_ms, 'mode': mode,
+                               'accents': doc.accents, 'params': doc.params,
+                               'swingbright': state == 'leds'}
                     if self._timing is not None and mode == 'loop':
                         segment['loop_sounds'] = self._timing.loop_sounds(state)
                         if segment['loop_sounds']:
@@ -1855,7 +2035,9 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
             # state replays its sound each time round, a looping one keeps its hum/lockup.
             doc = self._doc
             segment = {'label': doc.label, 'source': doc.display_image,
-                       'delay_ms': doc.delay_ms, 'mode': 'loop'}
+                       'delay_ms': doc.delay_ms, 'mode': 'loop',
+                       'accents': doc.accents, 'params': doc.params,
+                       'swingbright': doc.state == 'leds'}
             if self._timing is not None and doc.state:
                 if self._timing.sounds(doc.state):
                     segment['mode'] = 'once'
@@ -1985,7 +2167,7 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         'ellipse': "Press at the center and drag out: sideways = over time, up/down = along "
                    "the blade. Hold Shift for a circle.",
         'gradient': "Drag to set the direction (Radial / Elliptical: from the center out; "
-                    "Shift snaps). Fills the selected stages, or everything.",
+                    "Shift snaps). Stays within the selected stages, if any.",
         'bucket': "Click to fill the connected area of that color, inside the selected stages "
                   "if any. Gradient fill: drag from the clicked cell to set its direction.",
         'select': "Drag across columns to select stages (Shift-click extends), then use the "
@@ -2213,6 +2395,52 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         self._delete_button.setEnabled(
             has_selection and selection[1] - selection[0] + 1 < self._grid.stage_count())
 
+    # ------------------------------------------------------------------ simulation
+
+    def _on_simulate_toggled(self, checked: bool):
+        self._preview.simulate = checked
+        self._preview.refresh()
+
+    def _on_swing_changed(self, value: int):
+        self._simulator.swing_speed = value
+        self._swing_label.setText(f"Swing speed: {value}\nSound volume: {round(self._simulator.volume * 100)}%")
+        self._preview.refresh()
+
+    def _swing_once(self):
+        self._swing_animation.stop()
+        self._swing_animation.start()
+
+    def _commit_sbright(self):
+        params = self._sbright_combo.currentData()
+        if not params or self._commit_handler is None or self._timing is None:
+            return
+        values = {name: str(value) for name, value in params.items()}
+        ok, message = self._commit_handler(self._timing.font_path, values)
+        if not ok:
+            QtWidgets.QMessageBox.warning(self, "Couldn't Commit SwingBright", message)
+            return
+        # The font's settings now have these values - preview them as "Profile's settings".
+        self._timing.settings.update(values)
+        self._simulator.set_settings(self._timing.settings)
+        self._sbright_combo.setCurrentIndex(0)
+        QtWidgets.QMessageBox.information(self, "SwingBright Committed", message)
+
+    def _on_sbright_changed(self, *_args):
+        self._simulator.sbright_override = self._sbright_combo.currentData()
+        self._sbright_commit.setEnabled(
+            self._sbright_combo.currentData() is not None and self._commit_handler is not None
+            and self._timing is not None)
+        self._sbright_commit.setToolTip(
+            self._sbright_commit.toolTip() if self._commit_handler is not None
+            and self._timing is not None else
+            "Pick a font (main window or Match to sound) to commit SwingBright settings to.")
+        sbright = self._simulator.swingbright()
+        text = sbright.describe()
+        if self._timing is None:
+            text += " · no font, so blade color is assumed"
+        self._sbright_label.setText(text)
+        self._preview.refresh()
+
     def _toggle_preview(self):
         if self._preview.is_playing():
             self._preview.stop()
@@ -2262,6 +2490,7 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
 
     def _accept_with(self, action: str):
         self.chosen_action = action
+        self._swing_animation.stop()
         self._preview.stop()
         self.accept()
 
