@@ -112,6 +112,18 @@ class MainWindow(QtWidgets.QMainWindow):
         grafx_editor_button.clicked.connect(self.open_grafx_editor)
         left_layout.addWidget(grafx_editor_button)
 
+        # special.txt (overrides / special modes) and the iSaber music tracks
+        special_button = QtWidgets.QPushButton("Special Settings...")
+        special_button.setFixedWidth(250)
+        special_button.setToolTip("Edit special.txt - blademusicstyle, maxvol, auto-on/off, OLED options, ...")
+        special_button.clicked.connect(self.open_special_settings)
+        left_layout.addWidget(special_button)
+        tracks_button = QtWidgets.QPushButton("Music Tracks (iSaber)...")
+        tracks_button.setFixedWidth(250)
+        tracks_button.setToolTip("Add songs to /tracks for the iSaber player, which the blade can play along to")
+        tracks_button.clicked.connect(self.open_tracks_dialog)
+        left_layout.addWidget(tracks_button)
+
         # Soundfont header
         header_label = QtWidgets.QLabel("Soundfont Folders")
         header_label.setStyleSheet("""
@@ -1160,6 +1172,48 @@ class MainWindow(QtWidgets.QMainWindow):
         report['orphaned_colors'] = sorted(all_color_numbers - referenced_colors)
 
         return report
+
+    def open_special_settings(self, focus_key: str = None):
+        if not self.folder_path:
+            QtWidgets.QMessageBox.information(self, "No Folder Loaded", "Select a CFX root folder first.")
+            return
+        from gui.special_settings_dialog import SpecialSettingsDialog
+        SpecialSettingsDialog(self.folder_path, self, focus_key=focus_key).exec()
+
+    def open_tracks_dialog(self):
+        if not self.folder_path:
+            QtWidgets.QMessageBox.information(self, "No Folder Loaded", "Select a CFX root folder first.")
+            return
+        from gui.tracks_dialog import TracksDialog
+        TracksDialog(self.folder_path, self).exec()
+
+    def current_setting(self, name: str):
+        """A setting's live value: from the settings grid when a font is shown (so unsaved
+        edits count), else from config.txt's global header. None if not set."""
+        if self.current_font_path is not None:
+            value = self.settings_grid.get_current_settings().get(name)
+            if value is not None:
+                return value
+        return self.file_handler.load_master_config().get(name) if self.file_handler else None
+
+    def apply_grid_params(self, params: dict):
+        """Put params into the settings grid (highlighted, saved by Save Changes), like
+        apply_blade_profile_params but for whichever font is shown - used for settings that
+        aren't font-specific, e.g. the iSaber player's loop/shuffle in config.txt.
+        Returns (ok, message)."""
+        if self.current_font_path is None:
+            return False, ("Select any font in the main window first - its settings page is "
+                           "where these are changed and saved.")
+        failed = [name for name, value in params.items()
+                  if not self.settings_grid.set_parameter_value(name, value)]
+        if failed:
+            return False, f"These aren't shown in the settings, so they couldn't be set: {', '.join(failed)}."
+        sources = {self.settings_grid.param_sources.get(name, 'font') for name in params}
+        where = {"global": "config.txt (applies to every font)", "blade": "the blade profile",
+                 "font": "this font's font_config.txt", "color": "the color profile"}
+        settings = ", ".join(f"{k}={v}" for k, v in params.items())
+        return True, (f"Set {settings} in {' and '.join(where.get(s, s) for s in sorted(sources))}. "
+                      f"Nothing is written yet - click Save Changes in the main window.")
 
     def apply_blade_profile_params(self, font_path, params: dict):
         """Put params (e.g. SwingBright settings chosen in the GraFx painter's preview) into
