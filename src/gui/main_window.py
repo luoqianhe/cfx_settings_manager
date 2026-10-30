@@ -135,6 +135,11 @@ class MainWindow(QtWidgets.QMainWindow):
         duplicates_button.setToolTip("Find and merge identical profiles in config.txt and colors.txt")
         duplicates_button.clicked.connect(self.open_duplicate_profiles)
         left_layout.addWidget(duplicates_button)
+        sound_check_button = QtWidgets.QPushButton("Check Sounds...")
+        sound_check_button.setFixedWidth(250)
+        sound_check_button.setToolTip("Find WAV files the board would skip or might stall on, and fix them")
+        sound_check_button.clicked.connect(self.open_sound_check)
+        left_layout.addWidget(sound_check_button)
 
         # Soundfont header
         header_label = QtWidgets.QLabel("Soundfont Folders")
@@ -1218,6 +1223,13 @@ class MainWindow(QtWidgets.QMainWindow):
         dialog.exec()
         if dialog.changed:
             self.load_cfx_folder(self.folder_path)
+
+    def open_sound_check(self):
+        if not self.folder_path:
+            QtWidgets.QMessageBox.information(self, "No Folder Loaded", "Select a CFX root folder first.")
+            return
+        from gui.sound_check_dialog import SoundCheckDialog
+        SoundCheckDialog(self.folder_path, self).exec()
 
     def current_setting(self, name: str):
         """A setting's live value: from the settings grid when a font is shown (so unsaved
