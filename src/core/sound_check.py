@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
-from core.tracks import SAMPLE_RATES, convert, converter
+from core.tracks import SAMPLE_RATES, convert
 
 PCM, EXTENSIBLE = 0x0001, 0xFFFE
 MACOS_JUNK_FOLDERS = ('.Spotlight-V100', '.fseventsd', '.Trashes', '.TemporaryItems')
@@ -175,7 +175,7 @@ def fix_actions(report: FileReport) -> List[str]:
     if codes & {'not_wav', 'truncated'}:
         return []
     if codes & {'format', 'rate', 'mixed_rate'}:
-        return ['convert'] if converter() else []
+        return ['convert']
     actions = []
     if 'stereo' in codes:
         actions.append('mono')
@@ -232,12 +232,6 @@ def fix_file(report: FileReport, target_rate: Optional[int] = None) -> List[str]
         os.close(fd)
         try:
             convert(path, Path(temp), target_rate or 44100, mono=True)
-            converted = read_header(Path(temp))
-            if converted and converted.extra_chunks:     # e.g. afconvert's FLLR padding
-                with open(temp, 'rb') as f:
-                    f.seek(converted.data_offset)
-                    data = f.read(converted.data_size)
-                _write_pcm(Path(temp), 1, converted.rate, data)
             os.replace(temp, path)
         finally:
             if os.path.exists(temp):

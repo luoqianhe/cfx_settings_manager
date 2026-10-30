@@ -3,7 +3,7 @@
 player (vocal menu, after the fonts) plays and the blade "plays along" to - plus the three
 settings that control it: blademusicstyle (special.txt), loop and shuffle (config.txt).
 
-Songs can be added from any format the system converter reads (MP3, M4A, AIFF, WAV, ...);
+Songs can be added from any format Qt's decoder reads (MP3, M4A, AIFF, FLAC, WAV, ...);
 they're converted to the board's format (16-bit WAV, 44,100 or 22,050 Hz, mono), optionally
 normalized, and numbered track1.wav, track2.wav, ... with no gaps.
 """
@@ -281,9 +281,6 @@ class TracksDialog(QtWidgets.QDialog):
         self.remove_button.setEnabled(has)
         self.fix_button.setEnabled(has and bool(self._tracks[row]['problems']))
         self.renumber_button.setEnabled(bool(track_files.numbering_problem(self._tracks)))
-        self.add_button.setEnabled(track_files.converter() is not None)
-        if track_files.converter() is None:
-            self.add_button.setToolTip("Needs macOS (afconvert) or ffmpeg to convert songs")
 
     # ------------------------------------------------------------------ actions
 

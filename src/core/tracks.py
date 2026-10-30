@@ -10,8 +10,6 @@ of full scale so they sit at a similar level to the saber's own sounds.
 """
 import array
 import re
-import shutil
-import subprocess
 import sys
 import tempfile
 import wave
@@ -72,35 +70,84 @@ def numbering_problem(tracks: List[dict]) -> Optional[str]:
     return None
 
 
-def converter() -> Optional[str]:
-    """'afconvert' (built into macOS) or 'ffmpeg', whichever is available."""
-    if sys.platform == 'darwin' and shutil.which('afconvert'):
-        return 'afconvert'
-    if shutil.which('ffmpeg'):
-        return 'ffmpeg'
-    return None
+DECODE_TIMEOUT_MS = 300_000
+
+
+def _decode(source: Path, rate: int = 0, channels: int = 0, first_buffer_only: bool = False):
+    """Decode `source` with Qt's audio decoder (FFmpeg-based, so MP3, M4A/AAC, AIFF, FLAC,
+    WAV, ... on every platform) into 16-bit samples. Qt converts to `rate`/`channels`
+    itself; with either left 0 it returns the file's own format. Returns
+    (bytes, rate, channels) - with first_buffer_only, just (b'', rate, channels) of the
+    file's own format. Needs a running Q(Core)Application."""
+    from PySide6 import QtCore, QtMultimedia
+
+    if QtCore.QCoreApplication.instance() is None:
+        raise RuntimeError("Audio conversion needs the app to be running.")
+    if not Path(source).is_file():
+        raise RuntimeError(f"{Path(source).name} doesn't exist.")
+    decoder = QtMultimedia.QAudioDecoder()
+    wanted = QtMultimedia.QAudioFormat()
+    wanted.setSampleFormat(QtMultimedia.QAudioFormat.Int16)
+    wanted.setSampleRate(rate)
+    wanted.setChannelCount(channels)
+    decoder.setAudioFormat(wanted)
+    decoder.setSource(QtCore.QUrl.fromLocalFile(str(source)))
+
+    chunks, formats, errors = [], set(), []
+    loop = QtCore.QEventLoop()
+
+    def on_buffer():
+        buffer = decoder.read()
+        if not buffer.isValid():
+            return
+        fmt = buffer.format()
+        formats.add((fmt.sampleRate(), fmt.channelCount(), fmt.sampleFormat()))
+        chunks.append(bytes(buffer.constData()))
+        if first_buffer_only:
+            decoder.stop()
+            loop.quit()
+
+    decoder.bufferReady.connect(on_buffer)
+    decoder.finished.connect(loop.quit)
+    decoder.error.connect(lambda _e: (errors.append(decoder.errorString()), loop.quit()))
+    timer = QtCore.QTimer.singleShot
+    # Start from inside the loop: an unreadable file reports its error straight away, which
+    # would otherwise arrive before loop.exec() and leave it waiting forever.
+    timer(0, decoder.start)
+    timer(DECODE_TIMEOUT_MS, lambda: (errors.append("Decoding took too long."), loop.quit()))
+    loop.exec(QtCore.QEventLoop.ExcludeUserInputEvents)
+    decoder.stop()
+
+    if errors and not (first_buffer_only and chunks):
+        raise RuntimeError(f"Couldn't read {Path(source).name}: {errors[0]}")
+    if not chunks:
+        raise RuntimeError(f"No audio found in {Path(source).name}.")
+    if len(formats) != 1:
+        raise RuntimeError(f"Couldn't convert {Path(source).name} (mixed formats).")
+    got_rate, got_channels, sample_format = formats.pop()
+    if first_buffer_only:           # just probing the file's own format
+        return b'', got_rate, got_channels
+    if sample_format != QtMultimedia.QAudioFormat.Int16 or (rate and got_rate != rate) \
+            or (channels and got_channels != channels):
+        raise RuntimeError(f"Couldn't convert {Path(source).name} to {rate} Hz, "
+                           f"{channels} channel(s).")
+    return b''.join(chunks), got_rate, got_channels
 
 
 def convert(source: Path, dest: Path, rate: int = 44100, mono: bool = True) -> None:
-    """Convert any audio file the converter understands (MP3, M4A, AIFF, WAV, ...) into the
-    board's format: 16-bit PCM WAV at `rate`, mono unless told otherwise."""
-    tool = converter()
-    if tool == 'afconvert':
-        command = ['afconvert', '-f', 'WAVE', '-d', f'LEI16@{rate}']
-        if mono:
-            command += ['-c', '1']
-        command += [str(source), str(dest)]
-    elif tool == 'ffmpeg':
-        command = ['ffmpeg', '-y', '-loglevel', 'error', '-i', str(source), '-vn',
-                   '-acodec', 'pcm_s16le', '-ar', str(rate)]
-        if mono:
-            command += ['-ac', '1']
-        command += [str(dest)]
-    else:
-        raise RuntimeError("No audio converter found - this needs macOS (afconvert) or ffmpeg.")
-    result = subprocess.run(command, capture_output=True, text=True)
-    if result.returncode != 0 or not dest.is_file():
-        raise RuntimeError((result.stderr or result.stdout or "conversion failed").strip())
+    """Convert any audio file Qt's decoder reads (MP3, M4A, AIFF, FLAC, WAV, ...) into the
+    board's format: 16-bit PCM WAV at `rate`, mono unless told otherwise (then it keeps the
+    source's channels). Uses no outside tools, so it works the same on macOS and Windows."""
+    channels = 1
+    if not mono:
+        _data, _rate, channels = _decode(source, first_buffer_only=True)
+        channels = min(channels, 2)
+    data, rate, channels = _decode(source, rate, channels)
+    with wave.open(str(dest), 'wb') as w:
+        w.setnchannels(channels)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(data)
 
 
 def normalize(path: Path, peak: float = NORMALIZE_PEAK) -> float:
