@@ -124,6 +124,18 @@ class MainWindow(QtWidgets.QMainWindow):
         tracks_button.clicked.connect(self.open_tracks_dialog)
         left_layout.addWidget(tracks_button)
 
+        # Bring a font in from another card, and tidy up the shared profile libraries
+        import_font_button = QtWidgets.QPushButton("Add Soundfont...")
+        import_font_button.setFixedWidth(250)
+        import_font_button.setToolTip("Copy a font from another CFX card, with its color/blade profiles and GraFx")
+        import_font_button.clicked.connect(self.open_import_font)
+        left_layout.addWidget(import_font_button)
+        duplicates_button = QtWidgets.QPushButton("Check Duplicate Profiles...")
+        duplicates_button.setFixedWidth(250)
+        duplicates_button.setToolTip("Find and merge identical profiles in config.txt and colors.txt")
+        duplicates_button.clicked.connect(self.open_duplicate_profiles)
+        left_layout.addWidget(duplicates_button)
+
         # Soundfont header
         header_label = QtWidgets.QLabel("Soundfont Folders")
         header_label.setStyleSheet("""
@@ -1186,6 +1198,26 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         from gui.tracks_dialog import TracksDialog
         TracksDialog(self.folder_path, self).exec()
+
+    def open_import_font(self):
+        if not self.folder_path:
+            QtWidgets.QMessageBox.information(self, "No Folder Loaded", "Select a CFX root folder first.")
+            return
+        from gui.import_font_dialog import ImportFontDialog
+        dialog = ImportFontDialog(self.folder_path, self)
+        if dialog.exec() and dialog.imported is not None:
+            self.load_cfx_folder(self.folder_path)
+            self._jump_to_font(str(dialog.imported))
+
+    def open_duplicate_profiles(self):
+        if not self.folder_path:
+            QtWidgets.QMessageBox.information(self, "No Folder Loaded", "Select a CFX root folder first.")
+            return
+        from gui.duplicate_profiles_dialog import DuplicateProfilesDialog
+        dialog = DuplicateProfilesDialog(self.folder_path, self)
+        dialog.exec()
+        if dialog.changed:
+            self.load_cfx_folder(self.folder_path)
 
     def current_setting(self, name: str):
         """A setting's live value: from the settings grid when a font is shown (so unsaved
