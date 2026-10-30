@@ -26,6 +26,13 @@ from gui.widgets.blade_preview import BladePreviewWidget
 from gui.validation_report_dialog import ValidationReportDialog
 from core.sound_player import SoundPlayer
 
+def _int_or_none(value):
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
@@ -130,9 +137,9 @@ class MainWindow(QtWidgets.QMainWindow):
         import_font_button.setToolTip("Copy a font from another CFX card, with its color/blade profiles and GraFx")
         import_font_button.clicked.connect(self.open_import_font)
         left_layout.addWidget(import_font_button)
-        duplicates_button = QtWidgets.QPushButton("Check Duplicate Profiles...")
+        duplicates_button = QtWidgets.QPushButton("Clean Up Profiles...")
         duplicates_button.setFixedWidth(250)
-        duplicates_button.setToolTip("Find and merge identical profiles in config.txt and colors.txt")
+        duplicates_button.setToolTip("Merge identical profiles and remove unused ones in config.txt and colors.txt")
         duplicates_button.clicked.connect(self.open_duplicate_profiles)
         left_layout.addWidget(duplicates_button)
         sound_check_button = QtWidgets.QPushButton("Check Sounds...")
@@ -1030,7 +1037,16 @@ class MainWindow(QtWidgets.QMainWindow):
             dialog = ValidationReportDialog(report, self.file_handler, self, backup_fn=self._backup_file)
             dialog.jump_to_font.connect(self._jump_to_font)
             dialog.font_config_changed.connect(self._on_font_config_changed_externally)
+            follow_up = []      # a fix the user picked: run it once the report closes
+            dialog.fix_grafx_requested.connect(
+                lambda warnings: (follow_up.append(lambda: self.open_grafx_timing_fix(warnings)),
+                                  dialog.accept()))
+            dialog.cleanup_profiles_requested.connect(
+                lambda: (follow_up.append(lambda: self.open_duplicate_profiles(tab='unused')),
+                         dialog.accept()))
             dialog.exec()
+            for action in follow_up:
+                action()
 
     def _apply_font_list_validation_highlighting(self, reset_others=True):
         """Color each font-list row red if that font has validation errors or missing
@@ -1175,7 +1191,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 for warning in check_resource(folder, timing):
                     report['grafx_warnings'].append({
                         'font_num': font_num, 'font_name': font_name, 'font_path': font_path,
-                        'resource': folder.name, 'slot': slot, **warning,
+                        'resource': folder.name, 'slot': slot,
+                        # where this font's refreshfx comes from, for a "lower refreshfx" fix
+                        'blade_profile': _int_or_none(effective_profile),
+                        'refresh_source': param_sources.get('refreshfx'),
+                        **warning,
                     })
 
             if font_errors or missing_font_keys:
@@ -1214,15 +1234,21 @@ class MainWindow(QtWidgets.QMainWindow):
             self.load_cfx_folder(self.folder_path)
             self._jump_to_font(str(dialog.imported))
 
-    def open_duplicate_profiles(self):
+    def open_duplicate_profiles(self, tab: str = None):
         if not self.folder_path:
             QtWidgets.QMessageBox.information(self, "No Folder Loaded", "Select a CFX root folder first.")
             return
         from gui.duplicate_profiles_dialog import DuplicateProfilesDialog
-        dialog = DuplicateProfilesDialog(self.folder_path, self)
+        dialog = DuplicateProfilesDialog(self.folder_path, self, tab=tab)
         dialog.exec()
         if dialog.changed:
             self.load_cfx_folder(self.folder_path)
+
+    def open_grafx_timing_fix(self, warnings: list):
+        from gui.grafx_timing_fix_dialog import GrafxTimingFixDialog
+        dialog = GrafxTimingFixDialog(warnings, self.folder_path, self)
+        if dialog.exec():
+            self._run_and_apply_validation()      # show what's left, if anything
 
     def open_sound_check(self):
         if not self.folder_path:

@@ -367,48 +367,121 @@ def merge_duplicates(root: Path, groups: List[DuplicateGroup]) -> Dict[LibraryKi
     Returns {kind: {old number: new number}}."""
     result = {}
     for kind in KINDS:
-        kind_groups = [g for g in groups if g.kind == kind]
-        if not kind_groups:
-            continue
-        lf = LineFile(root / kind.filename)
-        sections = parse_sections(lf, kind)
-        numbers = sorted({s.number for s in sections})
-        merged_into = {n: g.keep for g in kind_groups for n in g.remove}
-        kept = [n for n in numbers if n not in merged_into]
-        new_number = {old: i for i, old in enumerate(kept)}
-        mapping = {old: new_number[merged_into.get(old, old)] for old in numbers}
-
-        for s in reversed(sections):
-            if s.number in merged_into:
-                del lf.lines[s.comment_start:s.end]
-            elif mapping[s.number] != s.number:
-                lf.lines[s.header] = f"[{kind.section}={mapping[s.number]}]"
-        lf.save()
-
-        old_count = (max(numbers) + 1) if numbers else 0
-        prefs = read_prefs(root)
-        prefs_updates = {}
-        for number, _name, path in font_folders(root):
-            config_path = path / 'font_config.txt'
-            config = read_keys(config_path)
-            updates = {}
-            start = _int(config.get(kind.font_key), -1)
-            if start is not None and start in mapping:
-                updates[kind.font_key] = str(mapping[start])
-            if kind.mask_key in config:
-                remapped = _remap_mask(config[kind.mask_key], mapping, old_count, len(kept))
-                if remapped != config[kind.mask_key]:
-                    updates[kind.mask_key] = remapped
-            if updates and config_path.is_file():
-                set_keys(config_path, updates)
-            stored = _int(prefs.get(number - 1, {}).get(kind.prefs_key))
-            if stored is not None and stored in mapping and mapping[stored] != stored:
-                prefs_updates[number - 1] = {kind.prefs_key: str(mapping[stored])}
-        if prefs_updates:
-            _set_prefs(root, prefs_updates)
-        result[kind] = mapping
+        merged_into = {n: g.keep for g in groups if g.kind == kind for n in g.remove}
+        if merged_into:
+            result[kind] = _remove_sections(root, kind, merged_into)
     update_font_comments(root)
     return result
+
+
+def _remove_sections(root: Path, kind: LibraryKind,
+                     removed: Dict[int, Optional[int]]) -> Dict[int, int]:
+    """Delete the sections in `removed` ({number: profile its fonts move to, or None}),
+    renumber the rest without gaps and update every font's references to match. Returns
+    {old number: new number} for every profile that's kept or merged."""
+    lf = LineFile(root / kind.filename)
+    sections = parse_sections(lf, kind)
+    numbers = sorted({s.number for s in sections})
+    kept = [n for n in numbers if n not in removed]
+    new_number = {old: i for i, old in enumerate(kept)}
+    mapping = {old: new_number[removed.get(old, old)] for old in numbers
+               if removed.get(old, old) is not None}
+
+    for s in reversed(sections):
+        if s.number in removed:
+            del lf.lines[s.comment_start:s.end]
+        elif mapping[s.number] != s.number:
+            lf.lines[s.header] = f"[{kind.section}={mapping[s.number]}]"
+    lf.save()
+
+    old_count = (max(numbers) + 1) if numbers else 0
+    prefs = read_prefs(root)
+    prefs_updates = {}
+    for number, _name, path in font_folders(root):
+        config_path = path / 'font_config.txt'
+        config = read_keys(config_path)
+        updates = {}
+        start = _int(config.get(kind.font_key), -1)
+        if start is not None and start in mapping and mapping[start] != start:
+            updates[kind.font_key] = str(mapping[start])
+        if kind.mask_key in config:
+            remapped = _remap_mask(config[kind.mask_key], mapping, old_count, len(kept))
+            if remapped != config[kind.mask_key]:
+                updates[kind.mask_key] = remapped
+        if updates and config_path.is_file():
+            set_keys(config_path, updates)
+        stored = _int(prefs.get(number - 1, {}).get(kind.prefs_key))
+        if stored is not None and stored in mapping and mapping[stored] != stored:
+            prefs_updates[number - 1] = {kind.prefs_key: str(mapping[stored])}
+    if prefs_updates:
+        _set_prefs(root, prefs_updates)
+    return mapping
+
+
+# ---------------------------------------------------------------------- unused profiles
+
+@dataclass
+class UnusedProfile:
+    kind: LibraryKind
+    number: int
+    name: str
+    browsable_from: List[str]       # fonts whose used_profiles mask still offers it in Spectrum
+
+
+def find_unused(root: Path, kind: LibraryKind) -> List[UnusedProfile]:
+    """Profiles no font boots with (start_* or its prefs.txt entry). Profile 0 is never
+    listed: it's the board's fallback, and the file needs at least one."""
+    path = root / kind.filename
+    if not path.is_file():
+        return []
+    usage = profile_usage(root, kind)
+    masks = [(f"{n}-{name}", read_keys(p / 'font_config.txt').get(kind.mask_key, ''))
+             for n, name, p in font_folders(root)]
+    unused = []
+    for s in parse_sections(LineFile(path), kind):
+        if s.number == 0 or usage.get(s.number):
+            continue
+        browsable = [font for font, mask in masks
+                     if not mask.strip() or (s.number < len(mask.strip())
+                                             and mask.strip()[s.number] == '1')]
+        unused.append(UnusedProfile(kind, s.number, s.name, browsable))
+    return unused
+
+
+def remove_unused(root: Path, profiles: List[UnusedProfile]) -> Dict[LibraryKind, Dict[int, int]]:
+    """Delete the given unused profiles and renumber the rest (see _remove_sections).
+    Refuses any profile a font has started using since find_unused looked."""
+    result = {}
+    for kind in KINDS:
+        usage = profile_usage(root, kind)
+        removed = {p.number: None for p in profiles if p.kind == kind and p.number != 0}
+        in_use = [n for n in removed if usage.get(n)]
+        if in_use:
+            raise ValueError(f"{kind.label} {', '.join(map(str, in_use))} is now in use.")
+        if removed:
+            result[kind] = _remove_sections(root, kind, removed)
+    update_font_comments(root)
+    return result
+
+
+def set_profile_value(root: Path, kind: LibraryKind, number: int, key: str, value: str) -> bool:
+    """Change one key=value line inside [profile=N] (added at the section's end if missing).
+    Returns False if there's no such section."""
+    lf = LineFile(root / kind.filename)
+    for s in parse_sections(lf, kind):
+        if s.number != number:
+            continue
+        for i in range(s.header + 1, s.end):
+            m = _KEY_LINE_RE.match(lf.lines[i])
+            if m and m.group(1).strip().lower() == key.lower():
+                lf.lines[i] = f"{m.group(1).strip()}={value}"
+                break
+        else:
+            last = s.header + len(_body_lines(lf, s))
+            lf.lines.insert(last + 1, f"{key}={value}")
+        lf.save()
+        return True
+    return False
 
 
 # ---------------------------------------------------------------------- resources
@@ -618,7 +691,7 @@ def plan_import(source_font: Path, target_root: Path, include_browsable: bool = 
         if next_number > MAX_PROFILES:
             plan.errors.append(
                 f"This would take {kind.filename} to {next_number} {kind.label}s - the board "
-                f"allows {MAX_PROFILES}. Use Check Duplicate Profiles to free some up, or "
+                f"allows {MAX_PROFILES}. Use Clean Up Profiles to free some up, or "
                 f"untick the extra profiles.")
 
         plan.font_config[kind.font_key] = str(mapping[active])

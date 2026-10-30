@@ -11,6 +11,8 @@ class ValidationReportDialog(QtWidgets.QDialog):
 
     jump_to_font = QtCore.Signal(str)  # font_path, as a string
     font_config_changed = QtCore.Signal(str)  # font_path, as a string - written to disk from here
+    fix_grafx_requested = QtCore.Signal(list)   # the report's grafx_warnings
+    cleanup_profiles_requested = QtCore.Signal()
 
     def __init__(self, report: dict, file_handler, parent=None, backup_fn=None):
         super().__init__(parent)
@@ -116,6 +118,13 @@ class ValidationReportDialog(QtWidgets.QDialog):
 
         buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Close)
         buttons.rejected.connect(self.accept)
+        if grafx_warnings:
+            fix_button = buttons.addButton("Fix GraFx Timing…", QtWidgets.QDialogButtonBox.ActionRole)
+            fix_button.clicked.connect(lambda: self.fix_grafx_requested.emit(grafx_warnings))
+        if report['orphaned_profiles'] or report['orphaned_colors']:
+            cleanup_button = buttons.addButton("Remove Unused Profiles…",
+                                               QtWidgets.QDialogButtonBox.ActionRole)
+            cleanup_button.clicked.connect(self.cleanup_profiles_requested.emit)
         layout.addWidget(buttons)
 
     def _add_font_row(self, font_report):

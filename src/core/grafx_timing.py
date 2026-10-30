@@ -138,32 +138,46 @@ class FontTiming:
         duration = basis['duration_ms'] if basis['source'] != 'sound' or sound_ms is None else sound_ms
         return max(duration / max(1, stages), floor)
 
-    def check(self, state: str, stages: int, delay_ms: Optional[int]) -> List[str]:
-        """Warnings for an animation of `stages` stages with this delay (None/0 = synced)."""
+    def issues(self, state: str, stages: int, delay_ms: Optional[int]) -> List[dict]:
+        """Timing problems for an animation of `stages` stages with this delay (None/0 =
+        synced), as dicts with a 'message' plus what a fix needs:
+        'too_many_stages' - synced, more stages than the basis allows: 'fits' stages,
+            'needed_ms' per stage;
+        'delay_too_fast' - delay below refreshfx: 'retimed_stages' at delay=refreshfx
+            keeps the intended length."""
         refresh = self.refresh_ms
         if not refresh or stages <= 0:
             return []
-        warnings = []
         if delay_ms:
-            if delay_ms < refresh:
-                warnings.append(
+            if delay_ms >= refresh:
+                return []
+            return [{
+                'kind': 'delay_too_fast', 'refresh': refresh, 'stages': stages, 'delay': delay_ms,
+                'retimed_stages': max(1, round(stages * delay_ms / refresh)),
+                'message':
                     f"delay={delay_ms} ms is faster than refreshfx={refresh} ms - the board can't "
                     f"advance a stage more often than every {refresh} ms, so the {stages} stages "
-                    f"take about {stages * refresh} ms instead of {stages * delay_ms} ms.")
-            return warnings
+                    f"take about {stages * refresh} ms instead of {stages * delay_ms} ms."}]
         basis = self.basis(state)
         if basis is None:
-            return warnings
+            return []
         needed = basis['duration_ms'] / stages
-        if needed < refresh:
-            fits = max(1, basis['duration_ms'] // refresh)
-            what = (basis['source'] if basis['source'] != 'sound'
-                    else f"the shortest sound ({basis['duration_ms']} ms)")
-            warnings.append(
+        if needed >= refresh:
+            return []
+        fits = max(1, basis['duration_ms'] // refresh)
+        what = (basis['source'] if basis['source'] != 'sound'
+                else f"the shortest sound ({basis['duration_ms']} ms)")
+        return [{
+            'kind': 'too_many_stages', 'refresh': refresh, 'stages': stages, 'delay': None,
+            'fits': fits, 'needed_ms': needed, 'basis_ms': basis['duration_ms'],
+            'message':
                 f"Synced to {what}: {stages} stages would need {needed:.1f} ms each, but "
                 f"refreshfx is {refresh} ms - only about {fits} of the {stages} stages will "
-                f"play. Keep it to {fits} stages or fewer, or set a delay.")
-        return warnings
+                f"play. Keep it to {fits} stages or fewer, or set a delay."}]
+
+    def check(self, state: str, stages: int, delay_ms: Optional[int]) -> List[str]:
+        """Warning messages for an animation of `stages` stages with this delay."""
+        return [issue['message'] for issue in self.issues(state, stages, delay_ms)]
 
 
 def resample_stages(image: QtGui.QImage, stage_count: int) -> QtGui.QImage:
@@ -178,7 +192,8 @@ def resample_stages(image: QtGui.QImage, stage_count: int) -> QtGui.QImage:
 
 def check_resource(folder: Path, timing: FontTiming) -> List[dict]:
     """Every timing warning for one GraFx resource folder against one font's timing:
-    [{'state', 'file', 'message'}] - each BMP variant of each active section."""
+    [{'state', 'file', 'path', 'folder', 'message', 'kind', ...}] (see FontTiming.issues) -
+    each BMP variant of each active section."""
     results = []
     if folder is None or not folder.is_dir():
         return results
@@ -191,6 +206,7 @@ def check_resource(folder: Path, timing: FontTiming) -> List[dict]:
         except ValueError:
             delay = 0
         stages = QtGui.QImageReader(str(entry.path)).size().height()
-        for message in timing.check(entry.state, stages, delay or None):
-            results.append({'state': entry.state, 'file': entry.path.name, 'message': message})
+        for issue in timing.issues(entry.state, stages, delay or None):
+            results.append({'state': entry.state, 'file': entry.path.name, 'path': entry.path,
+                            'folder': folder, **issue})
     return results
