@@ -1,6 +1,7 @@
 # src/gui/grafx_timing_fix_dialog.py
-"""Fix the GraFx timing warnings from the validation report: one row per animation (or per
-grafx1.txt section, for delay fixes), each with a choice of fix. See core.grafx_timing_fix."""
+"""Fix the GraFx warnings from the validation report: one row per animation (or per
+grafx1.txt section, for delay and many= fixes), each with a choice of fix. See
+core.grafx_timing_fix."""
 from pathlib import Path
 
 from PySide6 import QtCore, QtWidgets
@@ -11,7 +12,7 @@ from core.grafx_timing_fix import SKIP, apply_fixes, plan_fixes
 class GrafxTimingFixDialog(QtWidgets.QDialog):
     def __init__(self, warnings: list, cfx_root: Path, main_window=None):
         super().__init__(main_window)
-        self.setWindowTitle("Fix GraFx Timing")
+        self.setWindowTitle("Fix GraFx Warnings")
         self.resize(980, 460)
         self.main_window = main_window
         self.root = Path(cfx_root)
@@ -21,7 +22,9 @@ class GrafxTimingFixDialog(QtWidgets.QDialog):
 
         layout = QtWidgets.QVBoxLayout(self)
         intro = QtWidgets.QLabel(
-            "The board can't move to the next stage of an animation faster than the blade "
+            "The board only loads the BMP files a section's many= declares, so a missing or "
+            "wrong many= stops an animation from playing. For timing: the board can't move "
+            "to the next stage of an animation faster than the blade "
             "profile's refreshfx. Squashing an animation keeps its look but drops stages "
             "evenly, so it fits the time it has. Lowering refreshfx keeps every stage, but "
             "changes the timing of everything else that profile shows (6 ms is the minimum; "
@@ -81,7 +84,7 @@ class GrafxTimingFixDialog(QtWidgets.QDialog):
     def _apply(self):
         choices = self._choices()
         if QtWidgets.QMessageBox.question(
-                self, "Fix GraFx Timing",
+                self, "Fix GraFx Warnings",
                 f"Apply {len(choices)} fix(es)? The changed files are backed up first.",
                 QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.Cancel) != QtWidgets.QMessageBox.Yes:
             return
@@ -96,5 +99,5 @@ class GrafxTimingFixDialog(QtWidgets.QDialog):
             return
         QtWidgets.QApplication.restoreOverrideCursor()
         QtWidgets.QMessageBox.information(
-            self, "GraFx Timing Fixed", "Changed:\n\n" + "\n".join(self.changes or ["(nothing)"]))
+            self, "GraFx Warnings Fixed", "Changed:\n\n" + "\n".join(self.changes or ["(nothing)"]))
         self.accept()

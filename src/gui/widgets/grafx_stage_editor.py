@@ -25,7 +25,7 @@ import random
 from PySide6 import QtCore, QtGui, QtMultimedia, QtWidgets
 
 from core import grafx_writer
-from core.grafx_timing import resample_stages
+from core.grafx_timing import QUICK_PARAMS, resample_stages
 from core.grafx_sim import FrameSimulator
 from core.sound_player import route_to_default_output
 from gui.widgets.widget_factory import create_rgb_picker_widget
@@ -1624,6 +1624,12 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         match_row.addWidget(self._match_mode_combo)
         match_row.addStretch()
         animation_form.addRow("", match_row)
+        # Power-on/off with qon/qoff set: the board times a synced animation to that, not to
+        # the sound - offered when it's much shorter than the sound (see _update_quick_button).
+        self._quick_button = QtWidgets.QPushButton()
+        self._quick_button.clicked.connect(self._commit_quick_to_sound)
+        self._quick_button.setVisible(False)
+        animation_form.addRow("", self._quick_button)
 
         zoom_row = QtWidgets.QHBoxLayout()
         self._zoom_w_spin = QtWidgets.QSpinBox()
@@ -2317,9 +2323,60 @@ class GrafxPixelEditorWindow(QtWidgets.QDialog):
         return stages, (f"{source} ({basis['duration_ms']} ms) ÷ {divisor} = {raw} stages"
                         f"{cap} ({timing.label})")
 
+    def _quick_mismatch(self, doc):
+        """(param, its value, shortest sound ms) when doc is a power-on/off timed to a qon/qoff
+        that's shorter than its sounds - else None."""
+        timing = self._timing
+        if timing is None or doc is None or doc.state not in QUICK_PARAMS:
+            return None
+        basis = timing.basis(doc.state)
+        sounds = timing.sounds(doc.state)
+        if basis is None or basis['source'] == 'sound' or not sounds:
+            return None
+        shortest = min(ms for _path, ms in sounds)
+        if shortest - basis['duration_ms'] < (timing.refresh_ms or 1):
+            return None          # close enough - within one stage
+        return basis['source'], basis['duration_ms'], shortest
+
+    def _update_quick_button(self):
+        mismatch = self._quick_mismatch(self._doc)
+        self._quick_button.setVisible(mismatch is not None)
+        if mismatch is None:
+            return
+        param, value, shortest = mismatch
+        what = "ignition" if param == 'qon' else "retraction"
+        self._quick_button.setText(f"Set {param} to {shortest} ms to match the sound")
+        self._quick_button.setToolTip(
+            f"{self._timing.label} has {param}={value} ms, so the board plays this animation "
+            f"(with no delay) in {value} ms, while its shortest sound lasts {shortest} ms. "
+            f"Setting {param}={shortest} makes the animation last as long as the sound - and "
+            f"the blade {what} take that long too. ({param} shouldn't be longer than any of "
+            f"the sounds, so this uses the shortest.)")
+        self._quick_button.setEnabled(self._commit_handler is not None)
+
+    def _commit_quick_to_sound(self):
+        mismatch = self._quick_mismatch(self._doc)
+        if mismatch is None or self._commit_handler is None:
+            return
+        param, _value, shortest = mismatch
+        ok, message = self._commit_handler(self._timing.font_path, {param: str(shortest)})
+        if not ok:
+            QtWidgets.QMessageBox.warning(self, f"Couldn't Set {param}", message)
+            return
+        self._timing.settings[param] = str(shortest)
+        self._update_match_sound()
+        self._rebuild_sequence()
+        QtWidgets.QMessageBox.information(self, f"{param} Set", message)
+
     def _update_match_sound(self):
         """Enable the box when this animation has a sound to match; if it's ticked, resize
         the animation to match (stretched over time, as one undo step)."""
+        self._update_quick_button()
+        basis = (self._timing.basis(self._doc.state)
+                 if self._timing is not None and self._doc is not None and self._doc.state else None)
+        self._match_sound_check.setText(
+            f"Match {basis['source']} ({basis['duration_ms']} ms)"
+            if basis and basis['source'] != 'sound' else "Match sound length")
         stages, why = self._sound_matched_stages(self._doc)
         self._match_sound_check.setEnabled(stages is not None)
         self._match_mode_combo.setEnabled(stages is not None)

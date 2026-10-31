@@ -70,8 +70,8 @@ class ValidationReportDialog(QtWidgets.QDialog):
         grafx_warnings = report.get('grafx_warnings', [])
         if grafx_warnings:
             group = QtWidgets.QTreeWidgetItem(
-                self.tree, [f"GraFx timing warnings ({len(grafx_warnings)}) - animations vs. "
-                            f"refreshfx and sound length"])
+                self.tree, [f"GraFx warnings ({len(grafx_warnings)}) - animation files, and "
+                            f"timing vs. refreshfx and sound length"])
             group.setExpanded(True)
             by_font = {}
             for warning in grafx_warnings:
@@ -119,7 +119,7 @@ class ValidationReportDialog(QtWidgets.QDialog):
         buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Close)
         buttons.rejected.connect(self.accept)
         if grafx_warnings:
-            fix_button = buttons.addButton("Fix GraFx Timing…", QtWidgets.QDialogButtonBox.ActionRole)
+            fix_button = buttons.addButton("Fix GraFx Warnings…", QtWidgets.QDialogButtonBox.ActionRole)
             fix_button.clicked.connect(lambda: self.fix_grafx_requested.emit(grafx_warnings))
         if report['orphaned_profiles'] or report['orphaned_colors']:
             cleanup_button = buttons.addButton("Remove Unused Profiles…",

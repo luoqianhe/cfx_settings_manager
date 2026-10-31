@@ -1,5 +1,10 @@
 # src/core/grafx_timing_fix.py
-"""Fixes for the GraFx timing warnings core.grafx_timing finds (see check_resource):
+"""Fixes for the GraFx warnings the validation pass finds - the timing problems
+core.grafx_timing.check_resource reports, plus grafx_reader.many_problems:
+
+  * many_mismatch - a section's many= doesn't match its BMP files (the board only loads the
+    files many= declares; a missing many= means none). Fix by setting many= to the files
+    that are numbered 1..N.
 
   * too_many_stages - a synced animation has more stages than its sound / qon / qoff can
     show at the blade's refreshfx, so the board never reaches the end. Fix by squashing it
@@ -26,17 +31,18 @@ from core.profile_library import BLADE, set_keys, set_profile_value
 
 MIN_REFRESH_MS = 6       # the manual's lower bound for refreshfx
 
-SHRINK, RETIME, REFRESH, SKIP = 'shrink', 'retime', 'refresh', 'skip'
+SHRINK, RETIME, REFRESH, SET_MANY, SKIP = 'shrink', 'retime', 'refresh', 'set_many', 'skip'
 
 
 @dataclass
 class TimingFix:
-    kind: str                         # too_many_stages / delay_too_fast
+    kind: str                         # too_many_stages / delay_too_fast / many_mismatch
     folder: Path
     state: str
     files: List[Tuple[Path, int, int]]     # (bmp, current stages, stages after SHRINK/RETIME)
     warnings: List[dict]
     new_delay: Optional[int] = None        # RETIME: the section's new delay
+    new_many: Optional[int] = None         # SET_MANY: the section's new many=
     new_refresh: Optional[int] = None      # REFRESH: refreshfx that would fix it
     refresh_targets: List[Tuple[str, object]] = field(default_factory=list)  # ('blade', n) / ('font', path)
 
@@ -52,6 +58,9 @@ class TimingFix:
     def options(self) -> List[Tuple[str, str]]:
         """[(action, label)] in order of preference; the first is the default."""
         options = []
+        if self.kind == 'many_mismatch':
+            return [(SET_MANY, f"Set many={self.new_many} in grafx1.txt"),
+                    (SKIP, "Leave as it is")]
         if self.kind == 'too_many_stages':
             path, stages, target = self.files[0]
             options.append((SHRINK, f"Squash to {target} stages (plays to the end)"))
@@ -93,8 +102,11 @@ def plan_fixes(warnings: List[dict]) -> List[TimingFix]:
     fixes = []
     by_file: Dict[Path, List[dict]] = {}
     by_section: Dict[Tuple[Path, str], List[dict]] = {}
+    by_many: Dict[Tuple[Path, str], List[dict]] = {}
     for w in warnings:
-        if w.get('kind') == 'too_many_stages':
+        if w.get('kind') == 'many_mismatch':
+            by_many.setdefault((Path(w['folder']), w['state']), []).append(w)
+        elif w.get('kind') == 'too_many_stages':
             by_file.setdefault(Path(w['path']), []).append(w)
         elif w.get('kind') == 'delay_too_fast':
             by_section.setdefault((Path(w['folder']), w['state']), []).append(w)
@@ -123,7 +135,16 @@ def plan_fixes(warnings: List[dict]) -> List[TimingFix]:
         if old_delay >= MIN_REFRESH_MS and targets:
             fix.new_refresh, fix.refresh_targets = old_delay, targets
         fixes.append(fix)
-    return sorted(fixes, key=lambda f: (f.folder.name, f.state, str(f.files[0][0]) if f.files else ''))
+    for (folder, state), group in by_many.items():
+        if group[0]['available'] < 1:
+            continue            # no <prefix>1.bmp - renaming files is beyond a config fix
+        files = [(entry.path, 0, 0) for entry in grafx_reader.list_grafx_files(folder)
+                 if entry.state == state and entry.variant <= group[0]['available']]
+        fixes.append(TimingFix('many_mismatch', folder, state, files, group,
+                               new_many=group[0]['available']))
+    # Missing files first - they stop an animation playing at all.
+    return sorted(fixes, key=lambda f: (f.kind != 'many_mismatch', f.folder.name, f.state,
+                                        str(f.files[0][0]) if f.files else ''))
 
 
 def apply_fixes(card_root: Path, choices: List[Tuple[TimingFix, str]],
@@ -139,7 +160,12 @@ def apply_fixes(card_root: Path, choices: List[Tuple[TimingFix, str]],
 
     for fix, action in choices:
         label = f"extra/GRAFX/{fix.folder.name}"
-        if action in (SHRINK, RETIME):
+        if action == SET_MANY:
+            txt = fix.folder / 'grafx1.txt'
+            back_up(txt, label)
+            update_config_section(txt, fix.section, {'many': str(fix.new_many)})
+            done.append(f"{fix.folder.name}/grafx1.txt [{fix.section}]: many={fix.new_many}")
+        elif action in (SHRINK, RETIME):
             for path, stages, target in fix.files:
                 if target == stages:
                     continue

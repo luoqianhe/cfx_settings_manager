@@ -1176,6 +1176,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
             # GraFx animations this font's blade profile links (style_grafx1/2/3) checked
             # against its refreshfx and sound/qon/qoff timing - warnings, not errors.
+            from core import grafx_reader
             from core.grafx_timing import FontTiming, check_resource
             timing = FontTiming(font_path, all_settings, label=f"{font_num}-{font_name}")
             checked_folders = set()   # the same resource on several slots is one set of warnings
@@ -1188,6 +1189,15 @@ class MainWindow(QtWidgets.QMainWindow):
                 if folder is None or folder in checked_folders:
                     continue
                 checked_folders.add(folder)
+                for problem in grafx_reader.many_problems(folder):
+                    report['grafx_warnings'].append({
+                        'font_num': font_num, 'font_name': font_name, 'font_path': font_path,
+                        'resource': folder.name, 'slot': slot, 'kind': 'many_mismatch',
+                        'state': problem['state'], 'folder': folder,
+                        'file': f"grafx1.txt [{problem['section']}]",
+                        'available': problem['available'],
+                        'message': grafx_reader.many_message(problem),
+                    })
                 for warning in check_resource(folder, timing):
                     report['grafx_warnings'].append({
                         'font_num': font_num, 'font_name': font_name, 'font_path': font_path,

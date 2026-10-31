@@ -202,6 +202,56 @@ _DISABLED_HEADER_RE = re.compile(r'^##\s*\[(\w+)\]\s*$')
 _DISABLED_PARAM_RE = re.compile(r'^##\s*([A-Za-z_]\w*)\s*=(.*)$')
 
 
+def many_problems(folder: Path) -> list:
+    """Active sections whose many= doesn't match their BMP files - the board loads only
+    <prefix>1..many.bmp, so a missing many= (or one that's too low) leaves files unplayed and
+    one that's too high points at files that don't exist. Sections with no files at all are
+    skipped: stock resources ship placeholder sections like that.
+    [{'state', 'section', 'many' (int or None), 'available' (N files numbered 1..N),
+      'files' (every variant number found)}]"""
+    problems = []
+    variants = {}
+    for entry in list_grafx_files(folder):
+        variants.setdefault(entry.state, []).append(entry.variant)
+    config = parse_grafx_config(folder / 'grafx1.txt')
+    for state, (section_name, _prefix) in GRAFX_STATES.items():
+        section = config.get(section_name)
+        found = sorted(variants.get(state, []))
+        if section is None or not found:
+            continue
+        available = 0
+        while available + 1 in found:
+            available += 1
+        try:
+            many = int(section['many']) if 'many' in section else None
+        except ValueError:
+            many = None
+        if many != available or available != len(found):
+            problems.append({'state': state, 'section': section_name, 'many': many,
+                             'available': available, 'files': found})
+    return problems
+
+
+def many_message(problem: dict) -> str:
+    """A sentence explaining a many_problems() entry."""
+    section, prefix = problem['section'], GRAFX_STATES[problem['state']][1]
+    many, available, files = problem['many'], problem['available'], problem['files']
+    names = ", ".join(f"{prefix}{n}.bmp" for n in files)
+    if available != len(files):
+        return (f"[{section}] files are {names} - they must be numbered from 1 with no gaps; "
+                f"the board can only reach {prefix}1-{available}.bmp."
+                if available else f"[{section}] has {names} but no {prefix}1.bmp, so the board "
+                                  f"finds none of them.")
+    if many is None:
+        return (f"[{section}] has no many= line, so the board doesn't load {names} - this "
+                f"animation never plays.")
+    if many > available:
+        return (f"[{section}] says many={many} but only {available} file(s) exist ({names}) - "
+                f"the board will look for files that aren't there.")
+    return (f"[{section}] says many={many} but there are {available} files ({names}) - the "
+            f"extra ones never play.")
+
+
 def section_status(folder: Path, state: str) -> str:
     """'active', 'disabled' (only present as a ##[SECTION] commented-out block, like the
     stock [FOREVER]) or 'missing'."""

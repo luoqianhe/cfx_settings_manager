@@ -188,8 +188,9 @@ def write_grafx_resource(folder: Path, state_specs: dict) -> None:
             lines.append(f"accents={spec['accents']}")
         if spec.get('delay_ms'):
             lines.append(f"delay={int(spec['delay_ms'])}")
-        if len(images) > 1:
-            lines.append(f"many={len(images)}")
+        # Always written, even for one file: the board doesn't scan the folder - it only
+        # loads the files many= declares, so without it the state shows no animation.
+        lines.append(f"many={len(images)}")
         if spec.get('stop'):
             lines.append("stop=1")
         for key, value in spec.get('extra_params', {}).items():
