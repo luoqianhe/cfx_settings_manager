@@ -114,6 +114,13 @@ LOCKUP_STYLE_MAP = {
     '5': 'flare', '6': 'rainbow', '7': 'grafx',
 }
 
+# over_pon/over_poff: how the power-on/off fx combines with the blade fx (unstable), per the
+# manual's "Power On/Off takeover and blending" section. 'overlay' (1) keeps the plain blade
+# color until the transition ends - this preview's original behavior, and the fallback for
+# unknown values. 'curtain' (3) is documented for power-on only.
+OVER_PON_MAP = {'0': 'melt', '1': 'overlay', '2': 'blend', '3': 'curtain'}
+OVER_POFF_MAP = {'0': 'melt', '1': 'overlay', '2': 'blend'}
+
 # style_preon/style_postoff options, grounded in parameters.json's Option descriptions. Only
 # id 4 ('GraFx preon'/'GraFx post off') is rendered here - the other ids (Rey burst, base
 # noise/candle, broken) are non-GraFx custom fx this preview doesn't approximate yet, so they
@@ -183,6 +190,10 @@ class BladePreviewWidget(QtWidgets.QWidget):
         self._flicker_off = False
         self._pon_style = 'normal'
         self._poff_style = 'normal'
+        self._on_fade = False    # on_fade/off_fade: brightness ramps with the transition
+        self._off_fade = False
+        self._over_pon = 'overlay'   # see OVER_PON_MAP
+        self._over_poff = 'overlay'
         self._unstable_mode = None  # None, 'rainbow', or 'pulse'
         self._clash_style = 'flash_full'
         self._lockup_style = 'legacy'
@@ -250,11 +261,14 @@ class BladePreviewWidget(QtWidgets.QWidget):
                      unstable_id=None, clash_style_id=None, lockup_style_id=None,
                      pos_lockup=None, size_lockup=None, focd_ms=None,
                      bolt_rgb=None, blaster_style_id=None, grafx_folder=None,
-                     preon_style_id=None, postoff_style_id=None):
+                     preon_style_id=None, postoff_style_id=None, refresh_grafx=True,
+                     on_fade=None, off_fade=None, over_pon=None, over_poff=None):
         """Update the color/timing/style this preview animates with. Does not change
         whatever ignition state is currently being displayed. grafx_folder is this font's
         linked /extra/GRAFX/<n> folder (a Path, resolved from style_grafx1 by the caller), or
-        None if it doesn't point anywhere real - see core/grafx_reader.py."""
+        None if it doesn't point anywhere real - see core/grafx_reader.py.
+        refresh_grafx=False (live edits in the settings grid) keeps the loaded GraFx sequences,
+        and whatever is playing, as long as grafx_folder hasn't changed."""
         self._color = QtGui.QColor(*rgb)
         self._foc_color = QtGui.QColor(*foc_rgb) if foc_rgb else QtGui.QColor(255, 255, 255)
         self._lockup_color = QtGui.QColor(*lockup_rgb) if lockup_rgb else QtGui.QColor(255, 140, 0)
@@ -271,7 +285,22 @@ class BladePreviewWidget(QtWidgets.QWidget):
         self._blaster_style = BLASTER_STYLE_MAP.get(str(blaster_style_id), 'flash')
         self._preon_style = PREON_STYLE_MAP.get(str(preon_style_id), 'none')
         self._postoff_style = POSTOFF_STYLE_MAP.get(str(postoff_style_id), 'none')
+        self._on_fade = str(on_fade) == '1'
+        self._off_fade = str(off_fade) == '1'
+        self._over_pon = OVER_PON_MAP.get(str(over_pon), 'overlay')
+        self._over_poff = OVER_POFF_MAP.get(str(over_poff), 'overlay')
 
+        self._lockup_frac_pos, self._lockup_frac_size = self._parse_localized(pos_lockup, size_lockup)
+        try:
+            self._clash_decay_ms = max(1, int(focd_ms))
+        except (TypeError, ValueError):
+            self._clash_decay_ms = self.CLASH_DECAY_MS
+        if refresh_grafx or grafx_folder != self._grafx_folder:
+            self._reload_grafx(grafx_folder)
+        self.update()
+        self._sync_timer()
+
+    def _reload_grafx(self, grafx_folder):
         # A new font may point at a different (or no) GraFx folder - drop anything cached
         # from the previous one so a stale bitmap can't linger.
         self._grafx_folder = grafx_folder
@@ -291,13 +320,6 @@ class BladePreviewWidget(QtWidgets.QWidget):
         self._grafx_forever_state = (
             load_grafx_state(self._grafx_folder, 'forever') if self._grafx_folder is not None else None
         )
-        self._lockup_frac_pos, self._lockup_frac_size = self._parse_localized(pos_lockup, size_lockup)
-        try:
-            self._clash_decay_ms = max(1, int(focd_ms))
-        except (TypeError, ValueError):
-            self._clash_decay_ms = self.CLASH_DECAY_MS
-        self.update()
-        self._sync_timer()
 
     @staticmethod
     def _parse_localized(pos, size):
@@ -550,11 +572,11 @@ class BladePreviewWidget(QtWidgets.QWidget):
         # it with 'base_flare's "to the base of the blade only" - i.e. it's describing how much
         # of the currently-lit length gets the FoC tint, not whether the blade scrolls at all.
         if style == 'lightstick':
-            return [QtCore.QRect(left, top, width, full_h)], fill
+            return [QtCore.QRect(left, top, width, full_h)], self._fade_brightness()
 
         if style == 'inverted':
             h = int(full_h * fill)
-            return [QtCore.QRect(left, top, width, h)], 1.0
+            return [QtCore.QRect(left, top, width, h)], self._fade_brightness()
 
         if style == 'split_in':
             half = full_h // 2
@@ -562,7 +584,7 @@ class BladePreviewWidget(QtWidgets.QWidget):
             return [
                 QtCore.QRect(left, top, width, h),
                 QtCore.QRect(left, bottom - h, width, h),
-            ], 1.0
+            ], self._fade_brightness()
 
         if style == 'split_out':
             half = full_h // 2
@@ -571,40 +593,179 @@ class BladePreviewWidget(QtWidgets.QWidget):
             return [
                 QtCore.QRect(left, center - h, width, h),
                 QtCore.QRect(left, center, width, h),
-            ], 1.0
+            ], self._fade_brightness()
 
         # 'normal' and anything unrecognized: scroll up from the hilt
         h = int(full_h * fill)
-        return [QtCore.QRect(left, bottom - h, width, h)], 1.0
+        return [QtCore.QRect(left, bottom - h, width, h)], self._fade_brightness()
+
+    def _fade_brightness(self) -> float:
+        """on_fade/off_fade: the blade's brightness ramps up over the power-on (and down over
+        the power-off) - combined with the scrolling styles this is the manual's ScrollFade.
+        Without it the lit part of the blade is at full brightness straight away."""
+        if self._direction == 1 and self._on_fade:
+            return self._fill
+        if self._direction == -1 and self._off_fade:
+            return self._fill
+        return 1.0
 
     def _base_color(self):
         if self._idle_animation_active():
-            if self._unstable_mode == 'rainbow':
-                hue = (self._idle_phase_s / self.RAINBOW_PERIOD_S) % 1.0
-                return QtGui.QColor.fromHsvF(hue, 1.0, 1.0)
-            if self._unstable_mode == 'pulse':
-                t = (math.sin(self._idle_phase_s * (2 * math.pi / self.PULSE_PERIOD_S)) + 1) / 2
-                return self._blend(self._color, self._foc_color, t)
-            if self._unstable_mode == 'flicker':
-                return self._scale_brightness(self._color, random.uniform(0.5, 1.0))
-            if self._unstable_mode == 'fire':
-                # Rougher and warmer than plain flicker: brightness jitter plus an occasional
-                # shift toward an orange/ember tone, distinguishing the named particle-sim
-                # styles (Sauron/Sauron II/Generative Unstable Fire) from simple flicker.
-                warm = self._blend(self._color, QtGui.QColor(255, 120, 0), random.uniform(0.0, 0.4))
-                return self._scale_brightness(warm, random.uniform(0.55, 1.0))
-            if self._unstable_mode == 'glitch':
-                # Occasional hard dropout rather than a smooth jitter - reads as corrupted/
-                # glitchy rather than a natural flicker.
-                if random.random() < 0.12:
-                    return self._scale_brightness(self._color, random.uniform(0.05, 0.25))
-                return self._color
+            return self._fx_color()
 
         style = self._current_style()
         if style == 'flare':
             return self._blend(self._foc_color, self._color, self._fill)
 
         return self._color
+
+    def _fx_color(self):
+        """The blade fx's (unstable) color for this frame, for the modes that are one color
+        along the whole blade. Plain blade color for everything else."""
+        if self._unstable_mode == 'rainbow':
+            hue = (self._idle_phase_s / self.RAINBOW_PERIOD_S) % 1.0
+            return QtGui.QColor.fromHsvF(hue, 1.0, 1.0)
+        if self._unstable_mode == 'pulse':
+            t = (math.sin(self._idle_phase_s * (2 * math.pi / self.PULSE_PERIOD_S)) + 1) / 2
+            return self._blend(self._color, self._foc_color, t)
+        if self._unstable_mode == 'flicker':
+            return self._scale_brightness(self._color, random.uniform(0.5, 1.0))
+        if self._unstable_mode == 'fire':
+            # Rougher and warmer than plain flicker: brightness jitter plus an occasional
+            # shift toward an orange/ember tone, distinguishing the named particle-sim
+            # styles (Sauron/Sauron II/Generative Unstable Fire) from simple flicker.
+            warm = self._blend(self._color, QtGui.QColor(255, 120, 0), random.uniform(0.0, 0.4))
+            return self._scale_brightness(warm, random.uniform(0.55, 1.0))
+        if self._unstable_mode == 'glitch':
+            # Occasional hard dropout rather than a smooth jitter - reads as corrupted/
+            # glitchy rather than a natural flicker.
+            if random.random() < 0.12:
+                return self._scale_brightness(self._color, random.uniform(0.05, 0.25))
+            return self._color
+        return self._color
+
+    def _draw_segments(self, painter, segments, color, style, position_dependent_idle,
+                       blade_left, blade_width):
+        """The blade's lit segments in one color, in the current power-on/off style."""
+        for blade_rect in segments:
+            if blade_rect.height() <= 0:
+                continue
+
+            glow = QtGui.QColor(color)
+            glow.setAlpha(70)
+            painter.fillRect(blade_rect.adjusted(-10, -4, 10, 0), glow)
+
+            if self._lockup_engaged:
+                self._draw_lockup(painter, blade_rect, color, blade_left, blade_width)
+            elif position_dependent_idle:
+                self._draw_idle_pattern(painter, blade_rect, color)
+            elif style == 'crumble':
+                self._draw_crumble(painter, blade_rect, color)
+            elif style == 'chopped':
+                self._draw_chopped(painter, blade_rect, color)
+            elif style in ('comet', 'nova'):  # nova's particle tail is layered on afterward
+                self._draw_comet(painter, blade_rect, color)
+            elif style == 'comet_tail':
+                self._draw_comet_tail(painter, blade_rect, color)
+            elif style == 'flood':
+                self._draw_flood(painter, blade_rect, color)
+            elif style == 'curtain':
+                self._draw_curtain(painter, blade_rect, color)
+            elif style == 'fade_trail':
+                self._draw_fade_trail(painter, blade_rect, color)
+            elif style == 'base_flare':
+                self._draw_base_flare(painter, blade_rect, color)
+            elif style == 'full_flare':
+                self._draw_full_flare(painter, blade_rect, color)
+            else:
+                painter.fillRect(blade_rect, color)
+
+    # ------------------------------------------------ power-on/off takeover (over_pon/poff)
+
+    def _takeover_mode(self):
+        """How the current power-on/off combines with the blade fx - None when there's no
+        transition, no blade fx (a plain blade looks the same either way), or 'overlay' (plain
+        blade color until the transition ends, then the fx)."""
+        if self._direction == 0 or self._unstable_mode is None or self._lockup_engaged:
+            return None
+        mode = self._over_pon if self._direction == 1 else self._over_poff
+        return None if mode == 'overlay' else mode
+
+    def _leds_state(self):
+        """The linked GraFx resource's [LEDS] (blade-on idle) sequence, loaded on first use."""
+        if self._grafx_leds_state is None and not self._grafx_leds_attempted:
+            self._grafx_leds_attempted = True
+            if self._grafx_folder is not None:
+                self._grafx_leds_state = load_grafx_state(self._grafx_folder, 'leds')
+        return self._grafx_leds_state
+
+    def _draw_blade_fx(self, painter, left, top, width, bottom):
+        """The blade fx (what unstable shows once the blade is lit) over the whole blade."""
+        full = QtCore.QRect(left, top, width, bottom - top)
+        if self._unstable_mode in ('grafx', 'vision'):
+            leds = self._leds_state()
+            if leds is not None:
+                self._draw_grafx_bitmap(painter, left, top, width, bottom, leds.image,
+                                        self._grafx_loop_stage_index(leds))
+                return
+            painter.fillRect(full, self._color)
+        elif self._unstable_mode in ('wave', 'chase', 'knightrider', 'gradient'):
+            self._draw_idle_pattern(painter, full, self._color)
+        else:
+            painter.fillRect(full, self._fx_color())
+
+    def _fx_image(self, rect, blade, segments, brightness):
+        """The blade fx, shown only where the blade is lit so far, as a transparent image the
+        size of the widget - for melt (drawn over the blade color, fading in) and curtain
+        (unveiled as the ignition scrolls)."""
+        image = QtGui.QImage(rect.size(), QtGui.QImage.Format_ARGB32_Premultiplied)
+        image.fill(QtCore.Qt.transparent)
+        p = QtGui.QPainter(image)
+        p.setClipRegion(self._segments_region(segments))
+        self._draw_blade_fx(p, *blade)
+        brightness *= self._flicker_brightness
+        if brightness < 1.0:
+            p.setCompositionMode(QtGui.QPainter.CompositionMode_SourceAtop)
+            p.fillRect(image.rect(), self._alpha_color(QtGui.QColor(0, 0, 0), 1.0 - brightness))
+        p.end()
+        return image
+
+    def _paint_blend_fx(self, painter, rect, blade, segments, style, brightness):
+        """over_pon/poff=2, "blend fx": the power-on/off style is drawn with the blade fx as its
+        base color instead of the flat blade color. Done by drawing the style in white (FoC
+        tints and brightness variations included) and multiplying it with the blade fx."""
+        left, top, width, bottom = blade
+        white = QtGui.QColor(255, 255, 255)
+        if style == 'flare':
+            white = self._blend(self._foc_color, white, self._fill)
+        white = self._scale_brightness(white, brightness * self._flicker_brightness)
+
+        shape = QtGui.QImage(rect.size(), QtGui.QImage.Format_ARGB32_Premultiplied)
+        shape.fill(QtGui.QColor(0, 0, 0))
+        p = QtGui.QPainter(shape)
+        self._draw_segments(p, segments, white, style, False, left, width)
+        p.end()
+
+        result = QtGui.QImage(rect.size(), QtGui.QImage.Format_ARGB32_Premultiplied)
+        result.fill(QtGui.QColor(0, 0, 0))
+        p = QtGui.QPainter(result)
+        self._draw_blade_fx(p, left, top, width, bottom)
+        p.setCompositionMode(QtGui.QPainter.CompositionMode_Multiply)
+        p.drawImage(0, 0, shape)
+        p.end()
+
+        painter.save()
+        painter.setClipRegion(self._segments_region(segments))
+        painter.drawImage(0, 0, result)
+        painter.restore()
+
+    @staticmethod
+    def _segments_region(segments):
+        region = QtGui.QRegion()
+        for segment in segments:
+            if segment.height() > 0:
+                region = region.united(QtGui.QRegion(segment))
+        return region
 
     def _draw_crumble(self, painter, rect, color):
         """Chunky/pixelated look: independently-jittered brightness blocks, refreshed every
@@ -1079,14 +1240,11 @@ class BladePreviewWidget(QtWidgets.QWidget):
                                      self._grafx_lockup_state.image, stage)
             grafx_handled = True
         elif self._idle_animation_active() and self._unstable_mode in ('grafx', 'vision'):
-            if self._grafx_leds_state is None and not self._grafx_leds_attempted:
-                self._grafx_leds_attempted = True
-                if self._grafx_folder is not None:
-                    self._grafx_leds_state = load_grafx_state(self._grafx_folder, 'leds')
-            if self._grafx_leds_state is not None:
-                stage = self._grafx_loop_stage_index(self._grafx_leds_state)
+            leds = self._leds_state()
+            if leds is not None:
+                stage = self._grafx_loop_stage_index(leds)
                 self._draw_grafx_bitmap(painter, blade_left, blade_top, blade_width, blade_bottom,
-                                         self._grafx_leds_state.image, stage)
+                                         leds.image, stage)
                 grafx_handled = True
         elif self._off_idle_animation_active():
             if self._grafx_idle_off_state is None and not self._grafx_idle_off_attempted:
@@ -1099,38 +1257,22 @@ class BladePreviewWidget(QtWidgets.QWidget):
                 grafx_handled = True
 
         if not grafx_handled:
-            for blade_rect in segments:
-                if blade_rect.height() <= 0:
-                    continue
-
-                glow = QtGui.QColor(color)
-                glow.setAlpha(70)
-                painter.fillRect(blade_rect.adjusted(-10, -4, 10, 0), glow)
-
-                if self._lockup_engaged:
-                    self._draw_lockup(painter, blade_rect, color, blade_left, blade_width)
-                elif position_dependent_idle:
-                    self._draw_idle_pattern(painter, blade_rect, color)
-                elif style == 'crumble':
-                    self._draw_crumble(painter, blade_rect, color)
-                elif style == 'chopped':
-                    self._draw_chopped(painter, blade_rect, color)
-                elif style in ('comet', 'nova'):  # nova's particle tail is layered on below
-                    self._draw_comet(painter, blade_rect, color)
-                elif style == 'comet_tail':
-                    self._draw_comet_tail(painter, blade_rect, color)
-                elif style == 'flood':
-                    self._draw_flood(painter, blade_rect, color)
-                elif style == 'curtain':
-                    self._draw_curtain(painter, blade_rect, color)
-                elif style == 'fade_trail':
-                    self._draw_fade_trail(painter, blade_rect, color)
-                elif style == 'base_flare':
-                    self._draw_base_flare(painter, blade_rect, color)
-                elif style == 'full_flare':
-                    self._draw_full_flare(painter, blade_rect, color)
-                else:
-                    painter.fillRect(blade_rect, color)
+            blade = (blade_left, blade_top, blade_width, blade_bottom)
+            takeover = self._takeover_mode()
+            if takeover == 'blend':
+                self._paint_blend_fx(painter, rect, blade, segments, style, style_brightness)
+            elif takeover == 'curtain':
+                painter.drawImage(0, 0, self._fx_image(rect, blade, segments, style_brightness))
+            else:
+                self._draw_segments(painter, segments, color, style, position_dependent_idle,
+                                    blade_left, blade_width)
+                if takeover == 'melt':
+                    # Starts as the blade color and melts into the blade fx as the power-on
+                    # progresses; a power-off melts back out of it (fill runs 1 -> 0).
+                    painter.save()
+                    painter.setOpacity(self._fill)
+                    painter.drawImage(0, 0, self._fx_image(rect, blade, segments, style_brightness))
+                    painter.restore()
 
         if (not grafx_handled and self._direction == -1
                 and style in ('sparkle_dust', 'sparkle_flake', 'nova')):

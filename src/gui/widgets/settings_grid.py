@@ -58,8 +58,16 @@ DYNAMIC_FOLDER_DROPDOWN_PARAMS = {
 # its 'bolt<n>' template.
 INDEXED_PARAM_NAME_RE = re.compile(r'^(.*?)(\d+)$')
 class SettingsGrid(QWidget):
+    # Any displayed value changed (debounced) - read them with get_current_settings().
+    settings_changed = Signal()
+    CHANGE_DEBOUNCE_MS = 150
+
     def __init__(self, title: str, main_window=None, column_stretches=None, parent=None):
         super().__init__(parent)
+        self._change_timer = QTimer(self)
+        self._change_timer.setSingleShot(True)
+        self._change_timer.setInterval(self.CHANGE_DEBOUNCE_MS)
+        self._change_timer.timeout.connect(self.settings_changed.emit)
         self.title = title
         self.main_window = main_window
         self.column_stretches = column_stretches or [1, 2, 2]
@@ -628,6 +636,7 @@ class SettingsGrid(QWidget):
             row = self._add_unknown_params_section(row)
 
         self._connect_cross_param_rules()
+        self._connect_live_change_signals()
         self._revalidate()
 
         # Built last, since it needs self.param_errors fully resolved (including live
@@ -1038,6 +1047,20 @@ class SettingsGrid(QWidget):
                     continue
                 widget, _display_type = self.param_widgets[param_name]
                 self._connect_change_signal(widget, self._revalidate)
+
+    def _connect_live_change_signals(self):
+        """Emit settings_changed (debounced, so dragging a slider doesn't flood listeners)
+        whenever any displayed value changes - e.g. so the blade preview follows unsaved edits."""
+        for widget, display_type in self.param_widgets.values():
+            if display_type == 'color_picker':
+                color_inputs, _preview = widget
+                for _slider, spin in color_inputs.values():
+                    spin.valueChanged.connect(self._schedule_settings_changed)
+            else:
+                self._connect_change_signal(widget, self._schedule_settings_changed)
+
+    def _schedule_settings_changed(self, *_args):
+        self._change_timer.start()
 
     def _connect_change_signal(self, widget, slot):
         """Connect the appropriate 'value changed' signal for whatever widget type this is."""
